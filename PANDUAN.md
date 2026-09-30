@@ -125,10 +125,10 @@ Bisa juga dihapus manual dari Upstash console: hapus elemen dari `kkn:notes`.
 ```
 web-galeri-kkn/
 ├── index.html          # markup; section baru + dua modal
-├── style.css           # tali, kayu, sticky note, tirai transisi
-├── script.js           # modul Rope (Jemuran) & Madd (Madding)
-├── data/photos.js      # 50 foto: src, kategori, caption, tanggal
-├── assets/foto/        # 171 foto WebP 1600px (lazy-load), 50 dipakai halaman
+├── style.css           # tali, kayu, sticky note, Jejak, tirai transisi
+├── script.js           # modul Rope, Film, Jejak, Archive & Madd (Madding)
+├── data/photos.js      # 171 foto: src, small, bagian, tanggalISO, caption
+├── assets/foto/        # 171 foto WebP 1600px + 171 varian -sm 900px (lazy-load)
 ├── assets/             # foto asli dari kamera (tidak ikut deploy, lihat .vercelignore)
 └── api/notes.js        # fungsi serverless (Node, tanpa dependensi)
 ```
@@ -138,7 +138,99 @@ file, di depan tiap modul.
 
 ---
 
-## 6. Menyesuaikan tampilan
+## 6. Pembagian foto antar section
+
+`data/photos.js` adalah satu-satunya file yang perlu diedit. Tiap foto punya
+satu field `bagian` yang menentukan section tempatnya tampil:
+
+| bagian    | jumlah | rentang sekarang        | tampil di                          |
+|-----------|--------|-------------------------|------------------------------------|
+| tumpukan  | 20     | foto-01 .. foto-20      | Tumpukan + hero                    |
+| jemuran   | 30     | foto-21 .. foto-50      | Jemuran (tali jemuran, HP)         |
+| film      | 14     | foto-51 .. foto-64      | Rol film (khusus HP <= 768px)      |
+| jejak     | 107    | foto-65 .. foto-171     | Jejak                              |
+
+Aturan mainnya: **satu foto hanya boleh punya satu `bagian`**, jadi tidak ada
+foto yang tampil di dua section tetap. Kalau `bagian` dihapus, fotonya otomatis
+masuk ke `jejak`.
+
+Dua pengecualian yang disengaja:
+
+- **Semua foto** (arsip) menampilkan seluruh 171 foto apa adanya, karena memang
+  inspector galeri. Dipaginasikan 36 foto per klik lewat tombol
+  "Muat foto berikutnya" supaya tidak memuat 171 elemen sekaligus.
+- **Madding** adalah papaneken, isinya foto yang dipilih pengunjung sendiri.
+
+Mengubah jatah cukup mengedit nilai `bagian`; `index.html`, `style.css`, dan
+chip filter ikut dihitung ulang otomatis. Jumlah foto dan titik Jejak diatur
+dua konstanta di awal `script.js`:
+
+| konstanta         | nilai | arti                                            |
+|-------------------|-------|-------------------------------------------------|
+| `JEJAK_TOTAL`     | 40    | berapa foto yang dipakai di Jejak              |
+| `PER_TITIK`       | 4     | berapa foto per titik singgah                  |
+
+Ubah `JEJAK_TOTAL` saja dan sisanya ikut menyesuaikan, selama habis dibagi
+`PER_TITIK`.
+
+### Jejak
+
+Jejak **tidak mengelompokkan foto per tanggal**. `tanggalISO` tidak lagi
+menentukan apa pun di section ini; tidak ada tombol "+N", tidak ada baris loncat
+per hari, dan tidak ada teks "Hari ke-N".
+
+- Foto diambil berurutan dari kandidat berprioritas: yang `bagian`-nya
+  `jejak` (atau tanpa `bagian`) didahulukan, baru foto bagian lain.
+- Bila kandidat lebih banyak dari `JEJAK_TOTAL`, pengambilan memakai langkah
+  tetap sehingga Jejak mewakili seluruh perjalanan, bukan 40 foto pertama.
+- Fotonya lalu dibagi rata menjadi titik singgah: `JEJAK_TOTAL / PER_TITIK` titik,
+  berlabel **Titik 01** sampai **Titik NN**. Metadata "40 foto · 10 titik"
+  dihitung otomatis.
+- Lightbox berpindah di antara seluruh foto Jejak dengan counter `01 / 40`.
+
+Tata letaknya tiga lajur di dalam satu pita tengah: jalur zigzag yang digambar
+dengan `stroke-dashoffset`, dua polaroid di lajur atas dan dua di lajur bawah
+(terhubung pin paku dengan benang). Posisi foto simetris terhadap pin supaya
+saat pin sampai tengah layar keempat foto ikut terbawa ke tengah dan tidak ada
+yang tertinggal di tepi.
+
+Mode tampilnya menyesuaikan kemampuan perangkat:
+
+| kondisi                        | tata letak                                                     |
+|--------------------------------|----------------------------------------------------------------|
+| desktop, animasi boleh         | track horizontal di-pin, scroll vertikal menggeser track        |
+| layar HP (`<= 768px`)          | sama persis dengan desktop, bukan zigzag vertikal               |
+| `prefers-reduced-motion` aktif | tanpa pin, semua foto langsung tampil, track bisa digeser native |
+| GSAP gagal dimuat              | tanpa pin, semua foto langsung tampil, track bisa digeser native |
+
+Dua mode terakhir memakai alasan yang sama: track horizontal digerakkan scroll,
+jadi tanpa ScrollTrigger ujung track tidak akan pernah terjangkau. Karena itu
+di mode statis `#jejakMap` mendapat `overflow-x: auto` sehingga track tetap bisa
+digeserhorizontal dengan scroll biasa.
+
+Jarak antar titik dibatasi dua sisi: 50% lebar layar (minimal 330px, maksimal
+520px) **dan** anggaran gulir `GULIR_MAKS_LAYAR` (5 layar). Pembatas kedua itu
+penting: kalau scroll dipotong, ujung track tidak akan pernah terjangkau. Foto
+reveal mengikuti posisi horizontal track yang sedang tampil, dihitung di
+`draw()`.
+
+Jejak hanya memuat varian `-sm` (900px), dan thumbnail baru dimuat kalau
+titiknya sudah masuk layar.
+
+### Mengganti caption
+
+Foto 51-171 masih memakai caption placeholder. Cari semuanya dengan:
+
+```bash
+grep -n "ganti caption ini" data/photos.js
+```
+
+Ganti teksnya per foto, dan ubah `kategori` serta `tanggal` di blok yang sama
+kalau perlu.
+
+---
+
+## 7. Menyesuaikan tampilan
 
 **Warna kertas sticky note.** Ada di satu tempat, bagian atas `style.css`:
 
@@ -174,7 +266,7 @@ beban DOM.
 
 ---
 
-## 7. Aksesibilitas
+## 8. Aksesibilitas
 
 - Semua tombol punya `aria-label` atau teks yang terbaca.
 - Semua `img` punya `alt` (foto dekoratif `alt=""`).
@@ -188,7 +280,7 @@ beban DOM.
 
 ---
 
-## 8. Kalau ada masalah
+## 9. Kalau ada masalah
 
 **Papan selalu mode demo.** API tidak terjangkau. Cek:
 - URL Vercel benar dan `/api/notes` menjawab (coba buka langsung di browser).

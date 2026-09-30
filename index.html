@@ -4,12 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Catatan Lapangan — KKN [Nama Desa] [Tahun]</title>
-<meta name="description" content="Dokumentasi visual KKN [Nama Kelompok] di [Nama Desa], [Tahun]. Lima puluh foto lapangan, disusun seperti jurnal." />
+<meta name="description" content="Dokumentasi visual KKN [Nama Kelompok] di [Nama Desa], [Tahun]. 171 foto lapangan, disusun seperti jurnal." />
 <meta name="theme-color" content="#F3EBD8" />
 
 <meta property="og:type" content="website" />
 <meta property="og:title" content="Catatan Lapangan — KKN [Nama Desa] [Tahun]" />
-<meta property="og:description" content="Lima puluh foto lapangan dari KKN [Nama Kelompok]." />
+<meta property="og:description" content="171 foto lapangan dari KKN [Nama Kelompok]." />
 <meta property="og:image" content="assets/foto/foto-01.webp" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -30,7 +30,7 @@
 <!-- indikator progres + penomoran foto -->
 <div class="rail" aria-hidden="true"><span class="rail__fill"></span></div>
 <div class="hud" aria-hidden="true">
-  <span class="hud__now">01</span><span class="hud__slash">/</span><span class="hud__all">20</span>
+  <span class="hud__now">01</span><span class="hud__slash">/</span><span class="hud__all">171</span>
 </div>
 
 <!-- peta lompat cepat + tombol ke atas (HP saja) -->
@@ -62,6 +62,7 @@
   <nav class="topbar__nav" aria-label="Bagian halaman">
     <a href="#stack">Tumpukan</a>
     <a href="#jemuran">Jemuran</a>
+    <a href="#jejak">Jejak</a>
     <a href="#galeri">Semua foto</a>
     <a href="#madding">Madding</a>
     <a href="#catatan">Catatan</a>
@@ -85,7 +86,7 @@
       <p class="hero__lede">Sebagian besar waktu habis di jalan setapak, balai desa, dan sawah. Dokumentasi ini disusun berurutan seperti buku catatan, bukan seperti galeri pilihan.</p>
       <ul class="hero__facts">
         <li><b data-slot="hari">37</b><span>hari</span></li>
-        <li><b id="factTotal">50</b><span>foto</span></li>
+        <li><b id="factTotal">171</b><span>foto</span></li>
         <li><b>5</b><span>dusun</span></li>
       </ul>
     </div>
@@ -134,7 +135,7 @@
 
     <div class="rope__bar">
       <div class="rope__chips" id="ropeChips" role="group" aria-label="Filter kategori jemuran"></div>
-      <p class="rope__count"><b id="ropeNow">01</b><i>/</i><span id="ropeAll">50</span></p>
+      <p class="rope__count"><b id="ropeNow">01</b><i>/</i><span id="ropeAll">171</span></p>
     </div>
 
     <div class="rope__stage" id="ropeStage" tabindex="0" role="group"
@@ -186,20 +187,67 @@
     </div>
   </section>
 
-  <!-- 5. Semua foto: masonry di desktop (HP dilewati, semua fotonya ada di Jemuran) -->
+  <!-- 4c. JEJAK: jalur peta lapangan yang digambar pelan-pelan mengikuti scroll.
+       Titik singgah dibangun script.js dari foto yang dipilih Jejak.pick()
+       (bagian "jejak" diutamakan, sisanya sampling merata) lalu dibagi jadi
+       titik berisi PER_TITIK foto - tanpa pengelompokan per tanggal.
+       Desktop DAN HP sama: bagian dipin, scroll vertikal menggeser track ke
+       samping. tinggi peta = 100svh - tinggi header, dibagi tiga: lajur foto
+       atas, pita jalur, lajur foto bawah. -->
+  <section class="jejak" id="jejak">
+    <div class="jejak__pin" id="jejakPin">
+      <div class="jejak__stage" id="jejakStage">
+
+        <!-- kepala bagian TIDAK ikut bergeser dengan track: ia di luar
+             .jejak__map, jadi judul selalu tetap di kiri -->
+        <div class="jejak__head">
+          <p class="tag"><span class="tag__no">03</span> Jejak</p>
+          <h2 class="head head--jejak">Jalur yang dilalui, titik demi titik.</h2>
+          <p class="jejak__meta" id="jejakMeta">Menghitung…</p>
+        </div>
+
+        <p class="jejak__hint" id="jejakHint" aria-hidden="true">
+          <span>gulir ke bawah</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v15M5 12l7 7 7-7" /></svg>
+        </p>
+
+        <!-- track: ini yang digeser ke samping. Lebar & tinggi diisi script.js -->
+        <div class="jejak__map" id="jejakMap">
+          <svg class="jejak__svg" id="jejakSvg" aria-hidden="true" preserveAspectRatio="none">
+            <path class="jejak__base" id="jejakBase"></path>
+            <path class="jejak__line" id="jejakLine"></path>
+          </svg>
+          <div class="jejak__stops" id="jejakStops"></div>
+          <span class="jejak__walker" id="jejakWalker" aria-hidden="true">
+            <svg viewBox="0 0 40 40">
+              <path class="jejak__sol" d="M14 6c3.4 0 5.6 2.2 5.6 5.1 0 1.7-.8 3-1.9 4 3.4.5 5.9 1.6 7.6 3.2-2.4 1.6-5.3 2.4-8.4 2.4-2.6 0-4.9-.6-6.8-1.7 1.9-1.6 4.5-2.5 7.5-2.8-1-1-1.7-2.3-1.7-3.9C15.5 8.2 16.6 6 14 6Z"/>
+              <path class="jejak__sol" d="M13.8 25.4c3.2 0 5.3 2.1 5.3 4.8 0 1.6-.7 2.9-1.8 3.8 3.2.5 5.6 1.5 7.2 3-2.3 1.5-5 2.3-8 2.3-2.4 0-4.6-.6-6.4-1.6 1.8-1.5 4.3-2.4 7.1-2.7-1-.9-1.6-2.1-1.6-3.6 0-2.7 1-4.9 1.8-5.9Z"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Semua foto: ARSIP. Semua foto ada di sini (termasuk yang sudah
+       dipakai section lain), tapi dimuat bertahap lewat "Muat lebih banyak". -->
   <section class="wall" id="galeri">
     <div class="wall__head">
-      <p class="tag"><span class="tag__no">03</span> Semua foto</p>
-      <h2 class="head">Sisa bingkai, dikelompokkan per kegiatan.</h2>
+      <p class="tag"><span class="tag__no">04</span> Semua foto</p>
+      <h2 class="head">Arsip lengkap, semuanya ada di sini.</h2>
       <ul class="legend" id="legend"></ul>
     </div>
     <div class="wall__grid" id="wallGrid"></div>
+    <div class="wall__more">
+      <p class="wall__count" id="wallCount">0 dari 0</p>
+      <button class="wallbtn" id="moreBtn" type="button">Muat foto berikutnya</button>
+    </div>
   </section>
 
   <!-- 6. Madding: papan catatan untuk teman-teman -->
   <section class="madding" id="madding">
     <div class="madding__head">
-      <p class="tag"><span class="tag__no">04</span> Madding</p>
+      <p class="tag"><span class="tag__no">05</span> Madding</p>
       <h2 class="head">Papan ini milik kita semua. Tinggal selip kertas, tanpa perlu akun.</h2>
       <div class="madding__tools">
         <button class="padbtn" id="padOpen" type="button">
@@ -222,18 +270,20 @@
   <section class="closing" id="catatan">
     <div class="closing__veil" aria-hidden="true"></div>
     <div class="closing__inner">
-      <p class="tag tag--light"><span class="tag__no">05</span> Penutup</p>
-      <h2 class="head head--light">Yang belum selesai.</h2>
+      <p class="tag tag--light"><span class="tag__no">06</span> Penutup</p>
+      <h2 class="head head--light">Terima kasih.</h2>
       <ul class="todo">
-        <li><span>01</span> Jembatan bambu di RT 08 masih perlu diganti tahun depan.</li>
-        <li><span>02</span> Data padatan tani masih berupa catatan tangan, belum masuk ke tabel digital.</li>
-        <li><span>03</span> Katalog produk UMKM desa belum ada, semua masih dipajang di lapak depan.</li>
+        <li><span>01</span> Kades dan jajarannya, terima kasih sudah mengarahkan dan mendampingi kami sepanjang kegiatan di desa.</li>
+        <li><span>02</span> Bu RW, terima kasih sudah menemani dan menjadi tempat kami bertanya ketika berada di lapangan.</li>
+        <li><span>03</span> Jajaran RT, terima kasih sudah mengantarkan kami ke warga dan mempermudah kegiatan KKN ini.</li>
+        <li><span>04</span> Emak Abah Posko, terima kasih sudah menerima kami selama KKN berlangsung.</li>
+        <li><span>05</span> Guru-guru SDN 1 Cijawa, terima kasih sudah membuka kelas dan berbagi cerita dengan kami.</li>
       </ul>
-      <p class="closing__note">Tiga hal di atas kami serahkan ke desa, karena memang bukan tugas kami. Desa tetap jalan seperti biasa: lukis, siram, ukir. Sampai ketemu lagi, Juli 2027.</p>
+      <p class="closing__note">Foto-foto dan catatan lapangan lainnya kami kumpulkan di grup KKN SISDAMAAS Kelompok 55 — Lentera Sukahaji. KKN ini berlangsung di Desa Sukahaji, Kecamatan Cipeundeuy, Kabupaten Bandung Barat. Kalau ada info yang ingin ditanyakan, silakan tanyakan saja.</p>
       <p class="closing__credit">
-        Foto &amp; teks <span data-slot="kelompok">[Nama Kelompok]</span> ·
+        Foto &amp; teks <span data-slot="kelompok">Lentera Sukahaji</span> ·
         <span data-slot="universitas">[Nama Universitas]</span> ·
-        <span data-slot="desa">[Nama Desa]</span>, <span data-slot="tahun">[Tahun]</span>
+        <span data-slot="desa">Sukahaji</span>, <span data-slot="tahun">[Tahun]</span>
       </p>
       <a class="cue cue--light" href="#top"><span>Kembali ke atas</span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5M5 12l7-7 7 7" /></svg>

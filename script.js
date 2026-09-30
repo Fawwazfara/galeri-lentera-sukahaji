@@ -13,17 +13,37 @@
 (function () {
   "use strict";
 
+  /* ================================================================== JEJAK
+     Dua angka ini mengatur jumlah foto Jejak dan berapa foto per titik singgah.
+     Ubah di sini saja; seluruh section ikut menyesuaikan sendiri.
+
+       JEJAK_TOTAL : berapa foto yang dipakai di section Jejak
+       PER_TITIK   : berapa foto dalam satu titik singgah
+                    (jumlah titik = ceil(JEJAK_TOTAL / PER_TITIK))            */
+
+  const JEJAK_TOTAL = 40;
+  const PER_TITIK   = 4;
+
   /* ---------------------------------------------------------------- 0. util */
 
   const DATA  = window.PHOTOS || [];
   const TOTAL = DATA.length;
 
-  /* Tumpukan kartu hanya memakai foto ber- deck:true (20 foto, urutan data).
-     Sisa foto tidak masuk tumpukan: di desktop mereka jadi masonry, di HP
-     semuanya sudah ada di Jemuran (#jemuran) yang menggantikan baris film. */
-  const DECK = (function () {
+  /* --------------------------------------------------------------- jatah
+     Satu foto hanya boleh dippingin SATU section. Penentuannya field
+     `bagian` di data/photos.js:
+       tumpukan : kartu hero + deck      jemuran : tali jemuran
+       film     : rol kamera (HP)       jejak    : jalur peta / titik singgah
+     Foto tanpa `bagian` otomatis masuk jejak. Daftar ini hanya fallback:
+     kalau data/photos.js diisi lengkap, pembagian di situ yang berlaku. */
+  const ofPart = (name) => {
     const m = [];
-    DATA.forEach((p, i) => { if (p.deck === true) m.push(i); });
+    DATA.forEach((p, i) => { if ((p.bagian || "jejak") === name) m.push(i); });
+    return m;
+  };
+
+  const DECK = (function () {
+    const m = ofPart("tumpukan");
     return m.length ? m : DATA.map((p, i) => i);
   })();
   const DECK_N = DECK.length;
@@ -68,6 +88,14 @@
   if (totalEl) totalEl.textContent = pad2(TOTAL);
   const factTotal = $("#factTotal");
   if (factTotal) factTotal.textContent = TOTAL;
+  /* jumlah hari dihitung dari tanggalISO yang benar-benar dipakai, supaya
+     tidak lagi basi kalau tanggal foto ditambah atau diubah */
+  const factHari = $('[data-slot="hari"]');
+  if (factHari) {
+    const hari = {};
+    DATA.forEach(function (p) { if (p && p.tanggalISO) hari[p.tanggalISO] = 1; });
+    factHari.textContent = String(Object.keys(hari).length);
+  }
 
   /* penomoran foto di HUD: ditulis oleh Whoever sedang tampil di layar
      (tumpukan saat di-pin, masonry saat galerilewat pita tengah). */
@@ -80,7 +108,10 @@
     return n;
   }
 
-  function imgOf(p, eager) {
+  /* eager=true hanya untuk gambar pertama di hero. small=true memakai varian
+     900px (p.small) kalau ada — masonry & hero menampilkannya kecil, jadi
+     unduhan 1600px di situ mubazir. Lightbox selalu pakai src penuh. */
+  function imgOf(p, eager, small) {
     const im = new Image();
     im.decoding = "async";
     im.loading  = eager ? "eager" : "lazy";
@@ -88,7 +119,7 @@
     im.width  = p.w || 1200;
     im.height = p.h || 800;
     im.alt    = p.caption || "Foto dokumentasi KKN";
-    im.src    = p.src;
+    im.src    = (small && p.small) || p.src;
     return im;
   }
 
@@ -100,7 +131,10 @@
      Hero polaroid + kartu tumpukan + masonry. Semuanya dari DATA, jadi
      menambah foto cukup di data/photos.js. */
 
-  const FLOAT_IDX = [2, 11, 18];                    // 3 foto melayang di hero (dari tumpukan)
+  /* Tiga foto melayang di hero. Ambil dari jatah tumpukan supaya tidak
+     memakai foto yang sudah jadi milik section lain. */
+  const FLOAT_IDX = [0, 4, 9].map((n) => DECK[n]).filter((i) => i != null);
+  if (!FLOAT_IDX.length) FLOAT_IDX.push(...DECK.slice(0, 3));
 
   const heroFloat = $("#heroFloat");
   const deck      = $("#deck");
@@ -109,11 +143,18 @@
 
   const shotEls = [];   // masonry: dipakai counter foto + FLIP lightbox
 
+  /* Legenda ada di kepala section "Semua foto", jadi hitung dari seluruh DATA
+     (bukan hanya DECK) supaya angkanya cocok dengan masonry di bawahnya. */
   function renderLegend() {
     if (!legend) return;
     const counts = {};
-    DECK.forEach((i) => { const p = DATA[i]; counts[p.kategori] = (counts[p.kategori] || 0) + 1; });
-    Object.keys(counts).forEach((k) => {
+    const order = [];
+    DATA.forEach((p) => {
+      if (!p) return;
+      if (!(p.kategori in counts)) order.push(p.kategori);
+      counts[p.kategori] = (counts[p.kategori] || 0) + 1;
+    });
+    order.forEach((k) => {
       const li = el("li");
       li.appendChild(el("span", "dot"));
       li.appendChild(el("b", null, pad2(counts[k])));
@@ -132,7 +173,7 @@
       const cap = el("figcaption");
       cap.appendChild(el("span", null, pad2(i + 1)));
       cap.appendChild(el("span", null, p.kategori));
-      fig.appendChild(imgOf(p, n === 0));
+      fig.appendChild(imgOf(p, n === 0, true));
       fig.appendChild(cap);
       heroFloat.appendChild(fig);
     });
@@ -167,36 +208,77 @@
     deck.appendChild(frag);
   }
 
-  function renderWall() {
-    if (!wallGrid) return;
-    const frag = document.createDocumentFragment();
-    DECK.forEach((i) => {
-      const p = DATA[i];
-      const fig = el("figure", "shot");
-      fig.dataset.index = String(i);
+  /* ------------------------------------------------------------- ARSIP
+     "Semua foto" sekarang jadi arsip: seluruh isi PHOTOS, tapi dipecah
+     bertahap lewat tombol "Muat lebih banyak" supaya halaman desktop tidak
+     memuat 171 gambar sekaligus.-lightbox boleh navigasi ke semua foto
+     karena semua sudah ada di DOM. */
+  const ARCHIVE_STEP = 36;
+  const Wall = {
+    all: [], shown: 0, more: null, count: null,
 
-      const btn = el("button", "shot__btn");
-      btn.type = "button";
-      btn.setAttribute("aria-label", "Buka foto: " + p.caption);
-      const frame = el("span", "shot__frame");
-      frame.style.display = "block";
-      const im = imgOf(p);
-      frame.appendChild(im);
-      btn.appendChild(frame);
-      btn.addEventListener("click", () => lbOpen(i, im, DECK));
+    build() {
+      if (!wallGrid) return;
+      this.all = DATA.map(function (_, i) { return i; });
+      this.more = $("#moreBtn");
+      this.count = $("#wallCount");
+      this.show(ARCHIVE_STEP);
+      if (this.more) {
+        this.more.addEventListener("click", () => {
+          this.show(ARCHIVE_STEP);
+          wallReveal();
+          if (ST) ST.refresh();
+        });
+      }
+    },
 
-      const cap = el("figcaption");
-      cap.appendChild(el("b", null, pad2(i + 1) + " · " + p.tanggal));
-      cap.appendChild(el("span", null, p.kategori));
+    /* n = berapa foto lagi yang boleh masuk node DOM */
+    show(n) {
+      const frag = document.createDocumentFragment();
+      const end = Math.min(this.all.length, this.shown + n);
+      for (let k = this.shown; k < end; k++) {
+        const i = this.all[k];
+        const p = DATA[i];
+        if (!p) continue;
+        const fig = el("figure", "shot");
+        fig.dataset.index = String(i);
 
-      fig.appendChild(btn);
-      fig.appendChild(cap);
-      fig.appendChild(el("p", "shot__text", p.caption));
-      frag.appendChild(fig);
-      shotEls.push({ fig: fig, img: im, data: p, i: i });
-    });
-    wallGrid.appendChild(frag);
-  }
+        const btn = el("button", "shot__btn");
+        btn.type = "button";
+        btn.setAttribute("aria-label", "Buka foto: " + p.caption);
+        const frame = el("span", "shot__frame");
+        frame.style.display = "block";
+        const im = imgOf(p, false, true);
+        frame.appendChild(im);
+        btn.appendChild(frame);
+        btn.addEventListener("click", () => lbOpen(i, im, this.all));
+
+        const cap = el("figcaption");
+        cap.appendChild(el("b", null, pad2(i + 1) + " · " + p.tanggal));
+        cap.appendChild(el("span", null, p.kategori));
+
+        fig.appendChild(btn);
+        fig.appendChild(cap);
+        fig.appendChild(el("p", "shot__text", p.caption));
+        frag.appendChild(fig);
+        shotEls.push({ fig: fig, img: im, data: p, i: i });
+      }
+      wallGrid.appendChild(frag);
+      this.shown = end;
+      if (this.count) {
+        this.count.textContent = this.shown + " dari " + this.all.length;
+      }
+      if (this.more) {
+        const left = this.all.length - this.shown;
+        this.more.hidden = left <= 0;
+        this.more.textContent = left > 0
+          ? "Muat " + Math.min(left, ARCHIVE_STEP) + " foto lagi (" + left + " tersisa)"
+          : "Semua foto sudah dimuat";
+      }
+    }
+  };
+
+  function renderWall() { Wall.build(); }
 
   renderLegend();
   renderFloat();
@@ -223,13 +305,15 @@
     }
   }
 
+  /* target boleh elemen ATAU nomor posisi Y dari atas halaman. Jejak memakai
+     nomor supaya bisa loncat ke titik scroll tertentu, bukan ke elemen. */
   const scrollTo = (target, offset) => {
     const off = offset == null ? -2 : offset;
-    if (smooth) smooth.scrollTo(target, { offset: off });
-    else {
-      const y = target.getBoundingClientRect().top + window.scrollY + off;
-      window.scrollTo({ top: y, behavior: reduced() ? "auto" : "smooth" });
-    }
+    const y = (typeof target === "number")
+      ? target + off
+      : target.getBoundingClientRect().top + window.scrollY + off;
+    if (smooth) smooth.scrollTo(y);
+    else window.scrollTo({ top: y, behavior: reduced() ? "auto" : "smooth" });
   };
 
   $$('a[href^="#"]').forEach((a) => {
@@ -822,11 +906,16 @@
      Reveal clip-path (tirai kecil dari kanan) + stagger saat masuk viewport.
      Hanya desktop; di HP digantikan baris film. */
 
+  /* Animasi reveal hanya untuk foto yang BARU masuk DOM. Dipanggil ulang
+     setiap kali tombol "Muat lebih banyak" menambah foto, jadi foto lama
+     tidak di-trigger dua kali. */
+  let wallRevealed = 0;
   function wallReveal() {
     const grid = $("#wallGrid");
     if (!grid) return;
-    const items = $$(".shot", grid);
+    const items = $$(".shot", grid).slice(wallRevealed);
     if (!items.length || mqPhone.matches) return;
+    wallRevealed += items.length;
 
     if (!hasGSAP || reduced()) {
       items.forEach((it) => it.classList.add("is-seen"));
@@ -986,11 +1075,17 @@
       this.track.appendChild(frag);
     },
 
-    /* chip kategori diambil dari data, jadi tidak perlu diubah manual */
+    /* Chip kategori + angkanya dihitung dari pool jemuran, bukan seluruh
+       DATA, supaya "Semua" = 30 (bukan 171) dan tidak ada kategori kosong. */
     makeChips() {
       if (!this.chips) return;
+      const mine = ofPart("jemuran");
+      const src = mine.length ? mine : DATA.map((p, i) => i);
       const cats = [];
-      DATA.forEach((p) => { if (cats.indexOf(p.kategori) < 0) cats.push(p.kategori); });
+      src.forEach((i) => {
+        const k = DATA[i].kategori;
+        if (cats.indexOf(k) < 0) cats.push(k);
+      });
       const self = this;
       const add = (label, n, cat) => {
         const b = el("button", "chip");
@@ -1007,10 +1102,10 @@
         self.chips.appendChild(b);
         self.chipList.push(b);
       };
-      add("Semua", DATA.length, "");
+      add("Semua", src.length, "");
       cats.forEach((c) => {
         let n = 0;
-        DATA.forEach((p) => { if (p.kategori === c) n++; });
+        src.forEach((i) => { if (DATA[i].kategori === c) n++; });
         add(c, n, c);
       });
     },
@@ -1304,9 +1399,16 @@
 
     /* ------------------------------------------------- daftar & pergantian */
 
+    /* Pool jemuran HANYA foto ber- bagian:"jemuran", jadi tidak ada foto yang
+       muncul di dua section. Filter kategori tetap menyaring pool itu. */
     pool(cat) {
       const out = [];
-      DATA.forEach((p, i) => { if (!cat || p.kategori === cat) out.push(i); });
+      const mine = ofPart("jemuran");
+      const src = mine.length ? mine : DATA.map((p, i) => i);
+      src.forEach((i) => {
+        const p = DATA[i];
+        if (!cat || p.kategori === cat) out.push(i);
+      });
       return out;
     },
 
@@ -1527,12 +1629,12 @@
       this.mount();
     },
 
-    /* 14 foto: yang bertanda film:true (urutan file), atau 14 pertama.
-       Kalau yang ditandai kurang, sisanya diisi dari foto yang belum dipakai. */
+    /* 14 foto dari jatah bagian:"film" (urutan file). Kalau parts kosong,
+       ambil 14 foto pertama supaya bagian ini tidak pernah kosong. */
     picks() {
-      const marked = [], rest = [];
-      DATA.forEach(function (p, i) { (p.film === true ? marked : rest).push(i); });
-      return marked.concat(rest).slice(0, FILM_FRAMES).map(function (i) { return DATA[i]; });
+      const m = ofPart("film");
+      const src = m.length ? m : DATA.map((p, i) => i);
+      return src.slice(0, FILM_FRAMES).map(function (i) { return DATA[i]; });
     },
 
     /* satu roll: dua baris perforasi, dua baris tulisan tepi, 7 frame foto */
@@ -1732,6 +1834,658 @@
       this.live = false;
     }
   };
+
+
+  /* ------------------------------------------------- 4c. JEJAK (titik singgah)
+
+     Peta lapangan: satu jalur putus-putus yang digambar pelan-pelan mengikuti
+     scroll, dengan titik singgah. Setiap titik ditancapi pin paku lalu polaroid
+     ditempel berurutan.
+
+     SUMBER DATA
+     Tanpa tanggal. Foto dipilih oleh Jejak.pick(): bagian "jejak" diutamakan,
+     sisanya diisi foto yang tidak dipakai section lain, di sampling MERATA
+     sebanyak JEJAK_TOTAL, lalu dibagi jadi titik berisi PER_TITIK foto.
+
+     TATA LETAK — TIGA LAJUR (desktop maupun HP)
+     Tinggi area = 100svh dikurangi tinggi header, lalu dibagi:
+        lajur foto ATAS   - 2 polaroid per titik
+        PITA JALUR        - jalur zigzag dengan amplitudo kecil + label "Titik NN"
+        lajur foto BAWAH  - 2 polaroid per titik
+     Foto TIDAK mengikuti titik jalur (dulu foto ikut zigzag sehingga baris
+     bawahnya keluar viewport). Foto tetap di lajurnya, dihubungkan ke pin di
+     pita jalur oleh benang tipis. Karena itu tidak ada foto yang bisa
+     terpotong di tepi atas maupun bawah.
+
+     GERAK
+     Desktop dan HP sama: ScrollTrigger pin + scrub; scroll vertikal
+     menggeser track ke samping, dan reveal foto mengikuti posisi horizontal
+     track yang sedang tampil. Jalur digambar lewat stroke-dashoffset dan
+     penanda kaki berjalan di atasnya.
+     Reduced motion / GSAP gagal: tanpa pin, jalur tampil penuh, semua foto
+     langsung terlihat, track digeser dengan scroll horizontal native.
+     Yang dianimasikan hanya transform, opacity, stroke-dashoffset. */
+  const Jejak = {
+    sec: null, pin: null, stage: null, map: null, svg: null,
+    base: null, line: null, stopsBox: null, walker: null,
+    hint: null, head: null,
+    st: null, anim: null, io: null,
+    len: 0, lastW: 0, lastH: 0, alive: false, prog: 0,
+    stops: [], idx: [],
+
+    /* Doodle tangan: pohon, sawah, rumah, jembatan, bukit, bambu.
+       Digambar garis tipis seperti sketsa di buku catatan, bukan ikon/emoji. */
+    doodles: {
+      pohon:
+        '<path d="M17 3 C12 8 10 13 17 24 C24 13 22 8 17 3 Z"/>' +
+        '<path d="M17 24 L17 38"/>' +
+        '<path d="M17 30 L11 26"/><path d="M17 33 L23 29"/>',
+      sawah:
+        '<path class="isi" d="M2 34 L38 34 L38 38 L2 38 Z"/>' +
+        '<path d="M2 30 C10 22 16 26 24 18 C30 12 34 14 38 10"/>' +
+        '<path d="M4 30 C11 24 17 28 25 21"/>' +
+        '<path d="M28 30 C31 26 34 24 37 23"/>',
+      rumah:
+        '<path class="isi" d="M8 20 L20 11 L32 20 L32 38 L8 38 Z"/>' +
+        '<path d="M3 21 L20 8 L37 21"/>' +
+        '<path d="M16 38 L16 26 L24 26 L24 38"/>',
+      jembatan:
+        '<path d="M2 24 L38 24"/>' +
+        '<path d="M2 31 C10 14 28 14 38 31"/>' +
+        '<path d="M9 24 L9 33"/><path d="M20 24 L20 37"/><path d="M31 24 L31 33"/>',
+      bukit:
+        '<path class="isi" d="M2 35 C10 17 16 12 22 20 C28 29 32 22 38 35 Z"/>' +
+        '<path d="M12 35 L12 25"/><path d="M30 35 L30 28"/>',
+      bambu:
+        '<path d="M14 38 L14 4"/><path d="M14 14 L8 8"/><path d="M14 20 L20 14"/>' +
+        '<path d="M26 38 L26 12"/><path d="M26 22 L20 16"/><path d="M26 28 L32 22"/>'
+    },
+
+    /* ------------------------------------------------------------- kerangka */
+
+    build() {
+      this.sec = $("#jejak"); this.pin = $("#jejakPin"); this.stage = $("#jejakStage");
+      this.map = $("#jejakMap"); this.svg = $("#jejakSvg");
+      this.base = $("#jejakBase"); this.line = $("#jejakLine");
+      this.stopsBox = $("#jejakStops"); this.walker = $("#jejakWalker");
+      this.hint = $("#jejakHint"); this.head = $(".jejak__head");
+      this.meta = $("#jejakMeta");
+      if (!this.sec || !this.map || !this.line || !this.stopsBox) return;
+      if (this.alive) return;
+      if (!this.pick()) return;
+      this.alive = true;
+      /* Address bar HP mengubah tinggi viewport saat scroll; tanpa ini
+         ScrollTrigger menghitung ulang terus-menerus dan pin ikut meloncat. */
+      if (hasGSAP) { try { ST.config({ ignoreMobileResize: true }); } catch (e) { /* versi lama */ } }
+      this.layout();
+      this.reveal();
+      this.wire();
+    },
+
+    /* Pilih foto Jejak, TANPA mengelompokkan per tanggal.
+
+       Urutan prioritas kandidat:
+         1. foto ber- bagian:"jejak"
+         2. foto yang tidak dipakai section lain (tumpukan/jemuran/film)
+
+       Kalau kandidat lebih dari JEJAK_TOTAL, diambil MERATA dengan langkah
+       tetap: indeks ke-i = floor(i * n / JEJAK_TOTAL). Bukan JEJAK_TOTAL foto
+       pertama, karena itu hanya menampilkan satu awal perjalanan, bukan
+       seluruh perjalanan KKN. Hasil sampling dikembalikan ke urutan array,
+       jadi urutan Jejak tetap sama dengan urutan data/photos.js.
+
+       Jumlah foto per titik = PER_TITIK, jumlah titik = ceil(n / PER_TITIK). */
+    pick() {
+      const milikJejak = [], milikLain = [];
+      DATA.forEach(function (p, i) {
+        if (!p) return;
+        if ((p.bagian || "jejak") === "jejak") milikJejak.push(i);
+        else milikLain.push(i);
+      });
+
+      const kandidat = milikJejak.concat(milikLain);
+      let dipilih;
+      if (kandidat.length <= JEJAK_TOTAL) {
+        dipilih = kandidat;
+      } else {
+        dipilih = [];
+        const langkah = kandidat.length / JEJAK_TOTAL;
+        for (let i = 0; i < JEJAK_TOTAL; i++) {
+          dipilih.push(kandidat[Math.floor(i * langkah)]);
+        }
+      }
+      dipilih.sort(function (x, y) { return x - y; });
+
+      const titik = [];
+      for (let i = 0; i < dipilih.length; i += PER_TITIK) {
+        titik.push({ idx: dipilih.slice(i, i + PER_TITIK) });
+      }
+      this.stops = titik;
+      this.idx = dipilih;
+
+      if (this.meta) {
+        this.meta.textContent = dipilih.length + " foto \u00b7 " + titik.length + " titik";
+      }
+      return titik.length;
+    },
+
+    /* Tanpa pin: reduced-motion atau GSAP gagal dimuat. Jalur ditampilkan
+       penuh, semua foto langsung terlihat, dan track digeser dengan scroll
+       horizontal native supaya semua titik tetap bisa dicapai. */
+    statis() { return reduced() || !hasGSAP; },
+
+    /* ------------------------------------------------------------- geometri
+
+       Tinggi area dipin = tinggi viewport dikurangi tinggi header, lalu
+       dikurangi tinggi bar info. Sisa itu dibagi tiga:
+         lajur foto ATAS | PITA JALUR | lajur foto BAWAH
+       Pita jalur hanya perlu cukup tinggi untuk zigzag beramplitudo kecil. */
+    metrics() {
+      const n = Math.max(1, this.stops.length);
+      const vw = window.innerWidth;
+
+      /* tinggi header yang benar-benar terpakai, supaya konten yang dipin
+         mulai tepat di bawah header dan tidak ada tertutup */
+      const topbar = $(".topbar");
+      const headH = topbar ? topbar.offsetHeight : 56;
+      if (this.sec) this.sec.style.setProperty("--headh", headH + "px");
+
+      /* tinggi yang boleh dipakai peta di dalam pin */
+      const pinH = Math.max(320, (this.pin ? this.pin.clientHeight : 0) || window.innerHeight - headH);
+      const infoH = this.head ? this.head.offsetHeight : 0;
+      const mapH = Math.max(300, pinH - infoH - 8);
+
+      /* pita jalur: 10% tinggi peta, dibatasi 46..92px supaya zigzag tetap
+         kecil dan tidak memakan ruang foto */
+      const rib = Math.round(clamp(mapH * 0.11, 46, 92));
+      const laneH = Math.max(84, Math.round((mapH - rib) / 2));
+
+      /* jarak antar titik: cukup lebar untuk 2 polaroid, dan selalu
+         proporsional terhadap lebar layar supaya jumlah gulir tetap wajar */
+      /* Lebar polaroid dibatasi DUA SISI sekaligus:
+         - tinggi : kartu harus utuh di lajur foto. Kalau hanya dibatasi
+                    lebar, kartu jadi terlalu tinggi dan baris paling atas /
+                    paling bawah keluar dari viewport - itu bugs lama yang
+                    bikin foto terpotong.
+         - lebar  : 2 kartu + jarak + ruang kemiringan harus muat dalam satu
+                    slot titik, jadi titik berikutnya tidak menimpanya.
+         min() dari keduanya, lalu clamp. */
+      let jw = hitungJw(gap0(vw), laneH);
+
+      /* lead-in / lead-out selebar satu polaroid + jeda, supaya foto titik
+         pertama tetap utuh saat progress 0 dan foto titik terakhir tetap
+         utuh saat progress 1 */
+      let gap = gap0(vw), pad2 = jw + 24;
+      /* jarak antar titik juga dibatasi anggaran gulir: dengan begitu ujung
+         track selalu terjangkau, dan polaroid tetap sebesar mungkin */
+      const maksGap = Math.floor((vw + window.innerHeight * GULIR_MAKS_LAYAR - pad2 * 2) / Math.max(1, n - 1));
+      if (maksGap >= 300) {
+        gap = Math.min(gap, maksGap);
+        jw = hitungJw(gap, laneH);
+        pad2 = jw + 24;
+      }
+      gap = Math.round(gap);
+      const pad = pad2;
+      const trackW = Math.round(pad * 2 + gap * (n - 1));
+
+      return {
+        vw: vw, n: n, headH: headH, mapH: mapH, rib: rib, laneH: laneH,
+        gap: gap, pad: pad, trackW: trackW, jw: jw,
+        ribTop: laneH,                              /* y atas pita jalur */
+        zig: Math.round(clamp(mapH * 0.022, 7, 18)) /* amplitudo zigzag */
+      };
+    },
+
+    layout() {
+      if (!this.stops.length) return;
+      const m = this.metrics();
+      const n = m.n;
+      this.m = m;
+
+      /* track selebar peta; tinggi peta = 3 lajur */
+      this.sec.classList.toggle("is-static", this.statis());
+      this.map.style.width = m.trackW + "px";
+      this.map.style.height = m.mapH + "px";
+      this.map.style.setProperty("--jw", m.jw + "px");
+      this.map.style.setProperty("--rib", m.rib + "px");
+      this.map.style.setProperty("--lane", m.laneH + "px");
+      this.map.style.setProperty("--zig", m.zig + "px");
+      this.svg.setAttribute("viewBox", "0 0 " + m.trackW + " " + m.mapH);
+      this.svg.setAttribute("width", String(m.trackW));
+      this.svg.setAttribute("height", String(m.mapH));
+
+      /* titik-titik jalur. Amplitudo zigzag kecil dan SELALU di dalam pita,
+         jadi jalur tidak pernah keluar dari lananya. Jarak dari tepi = pad. */
+      const pts = [];
+      for (let k = 0; k < n; k++) {
+        const x = Math.round(m.pad + m.gap * k);
+        const y = m.ribTop + m.rib / 2 + (k % 2 ? m.zig : -m.zig);
+        pts.push([x, y]);
+      }
+      this.pts = pts;
+
+      /* jalur berkelok, kendali titik dikasih dorongan vertikal kecil supaya
+        jalur terasa hidup tanpa keluar dari pita */
+      let d = "M" + pts[0][0].toFixed(1) + " " + pts[0][1].toFixed(1);
+      for (let k = 1; k < n; k++) {
+        const q = pts[k - 1], p = pts[k];
+        const cx = (q[0] + p[0]) / 2;
+        const cy = (q[1] + p[1]) / 2 + (k % 2 ? -m.zig * 0.5 : m.zig * 0.5);
+        d += " Q " + cx.toFixed(1) + " " + cy.toFixed(1) + " " + p[0].toFixed(1) + " " + p[1].toFixed(1);
+      }
+      this.base.setAttribute("d", d);
+      this.line.setAttribute("d", d);
+
+      let len = 0;
+      try { if (this.line.getTotalLength) len = this.line.getTotalLength(); } catch (e) { len = 0; }
+      this.len = len || 3000;
+
+      /* layout() dipanggil ulang oleh refresh(), jadi jalur digambar sejauh
+         progress terakhir supaya tidak hilang_total */
+      const stat = this.statis();
+      this.prog = stat ? 1 : clamp(this.prog, 0, 1);
+      this.line.style.strokeDashoffset = String((1 - this.prog) * this.len);
+
+      /* bangun ulang titik singgah */
+      /* Snapshot diambil dari this.seen (diperbarui seketika oleh hit/shown),
+         bukan salinan lain: kalau salinan itu, foto yang baru saja tampil
+         ikut ter-reset opacity 0 lalu tidak pernah muncul lagi karena hit()
+         sudah menganggapnya pernah tampil. */
+      const before = this.seen ? this.seen.slice(0, n) : [];
+      this.stopsBox.textContent = "";
+      for (let k = 0; k < n; k++) this.buildStop(this.stops[k], pts[k], k, m);
+      /* Titik yang sebelumnya sudah tampil harus langsung kembali terlihat.
+         buildStop() membuat ulang elemen dari keadaan kosong, jadi tanpa ini
+         fotonya tertinggal opacity 0 padahal hit() sudah menandai "pernah
+         tampil" dan tidak akan memunculkannya lagi. */
+      this.stops.forEach(function (s, k) {
+        if (!before[k]) return;
+        this.shown(k);
+        this.loadThumbs(s);
+      }, this);
+      this.placeDoodles(m);
+      if (stat) this.stops.forEach(function (s, k) { this.hit(k); }, this);
+    },
+
+    /* ------------------------------------------------------------- satu titik
+
+       Empat polaroid: dua di lajur atas, dua di lajur bawah. Posisi diambil
+       dari CSS (--jw/--rib) lewat bottom-anchor untuk lajur atas supaya tepi
+       bawah kartu selalu tepat di atas pita jalur, apa pun tinggi captionnya. */
+    buildStop(stop, pt, k, m) {
+      /* `this` di dalam callback forEach bernilai undefined pada mode strict,
+         jadi dipakai self agar handler klik foto tahu seluruh daftar Jejak. */
+      const self = this;
+      const node = el("div", "jejak__stop");
+      node.dataset.k = String(k);
+      /* Posisi memakai left/top supaya kotak tiap titik bisa diukur langsung
+         dari layout, bukan dari transform. */
+      node.style.left = pt[0].toFixed(1) + "px";
+      node.style.top = pt[1].toFixed(1) + "px";
+      node.style.setProperty("--slot", m.gap + "px");
+
+      /* benang: 4 garis tipis dari pin ke tiap polaroid */
+      const benang = el("svg", "jejak__benang");
+      benang.setAttribute("viewBox", "0 0 " + m.gap + " " + m.mapH);
+      benang.setAttribute("preserveAspectRatio", "none");
+      benang.style.width = m.gap + "px";
+      benang.style.height = m.mapH + "px";
+      benang.style.left = (-m.gap * 0.5) + "px";
+      benang.style.top = (pt[1] - m.mapH / 2) + "px";
+      /* dua kolom foto duduk simetris terhadap pin (satu di kiri, satu di
+         kanan), jadi saat pin sampai tengah layar keempat foto ikut terbawa
+         ke tengah - tidak ada yang tertinggal di tepi layar. */
+      const yAtas = pt[1] - m.rib / 2;
+      const yBawah = pt[1] + m.rib / 2;
+      benang.innerHTML +=
+        '<path d="M0 ' + pt[1].toFixed(1) + ' L' + (-(m.jw + 14)) + " " + yAtas.toFixed(1) + '"/>' +
+        '<path d="M0 ' + pt[1].toFixed(1) + ' L' + 14 + " " + yAtas.toFixed(1) + '"/>' +
+        '<path d="M0 ' + pt[1].toFixed(1) + ' L' + (-(m.jw + 14)) + " " + yBawah.toFixed(1) + '"/>' +
+        '<path d="M0 ' + pt[1].toFixed(1) + ' L' + 14 + " " + yBawah.toFixed(1) + '"/>';
+      node.appendChild(benang);
+
+      /* pin paku */
+      const pin = el("span", "jejak__pinmark");
+      pin.innerHTML = '<svg viewBox="0 0 18 54">' +
+        '<circle class="kepala" cx="9" cy="8" r="7"/>' +
+        '<path class="batang" d="M9 14 L9 45"/>' +
+        '<path class="pantul" d="M1.5 20 C1.5 12 16.5 12 16.5 20"/>' +
+        "</svg>";
+      node.appendChild(pin);
+
+      /* label "Titik NN" - mono, reveal masking, berada DI PITA jalur sehingga
+         tidak mungkin menimpa foto karena foto ada di lajur atas/bawah */
+      const lab = el("div", "jejak__label");
+      lab.appendChild(el("i", null, "Titik " + pad2(k + 1)));
+      node.appendChild(lab);
+
+      /* polaroid */
+      const foto = [];
+      stop.idx.forEach(function (di, j) {
+        const p = DATA[di];
+        if (!p) return;
+        const fig = el("figure", "jejak__shot");
+        fig.classList.add(j < 2 ? "jejak__shot--atas" : "jejak__shot--bawah");
+        fig.style.setProperty("--kol", (j % 2 === 0 ? -(m.jw + 14) : 14) + "px");
+        const jr = (hash32("r" + di) - 0.5) * 9;      /* miring kecil, <= 4.5deg */
+        fig.style.setProperty("--jr", jr.toFixed(2) + "deg");
+        fig.dataset.jr = jr.toFixed(2);
+
+        const tape = el("span", "jejak__tape");
+        tape.style.transform = "rotate(" + ((hash32("t" + di) - 0.5) * 8).toFixed(2) + "deg)";
+        fig.appendChild(tape);
+
+        const btn = el("button", "jejak__shotbtn");
+        btn.type = "button";
+        btn.setAttribute("aria-label", "Buka foto: " + (p.caption || ""));
+        const im = thumbOf(p);                        /* hanya thumb, lazy */
+        btn.appendChild(im);
+        btn.addEventListener("click", function () {
+          lbOpen(di, im, self.idx);                   /* navigasi = seluruh Jejak */
+        });
+        fig.appendChild(btn);
+        fig.appendChild(el("figcaption", null, p.kategori || ""));
+        node.appendChild(fig);
+        foto.push(fig);
+      });
+
+      if (!this.statis()) {
+        pin.style.opacity = "0";
+        foto.forEach(function (f) { f.style.opacity = "0"; });
+        $$("i", lab).forEach(function (q) { q.style.transform = "translateY(105%)"; });
+      }
+
+      this.stopsBox.appendChild(node);
+      /* trigger reveal memakai benang, bukan node: node adalah jangkar 0x0
+         sehingga ScrollTrigger tidak bisa menghitung rentang horizontalnya. */
+      stop.node = node; stop.pin = pin; stop.lab = lab;
+      stop.photos = foto; stop.seen = this.statis();
+    },
+
+    /* ------------------------------------------------------------- doodle & kaki */
+
+    placeDoodles(m) {
+      $$(".jejak__doodle", this.map).forEach(function (n) { n.remove(); });
+      const keys = Object.keys(this.doodles);
+      if (this.pts.length < 2) return;
+      for (let k = 0; k < this.pts.length - 1; k++) {
+        const a = this.pts[k], b = this.pts[k + 1];
+        const t = 0.42 + hash32("d" + k) * 0.2;
+        const x = lerp(a[0], b[0], t);
+        /* doodle duduk di pita jalur, di atas garis, supaya tidak menimpa foto */
+        const y = m.ribTop + 6 + (hash32("g" + k) - 0.5) * (m.rib - 30);
+        const d = el("div", "jejak__doodle");
+        d.innerHTML = '<svg viewBox="0 0 40 42">' + this.doodles[keys[k % keys.length]] + "</svg>";
+        d.style.transform = "translate3d(" + x.toFixed(1) + "px," + y.toFixed(1) + "px,0)";
+        this.map.appendChild(d);
+      }
+    },
+
+    /* Penanda kaki menempel di garis lewat stroke-dashoffset, bukan lewat
+       interpolasi antar titik supaya tidak meleset dari kurva. */
+    walkerAt(p) {
+      if (!this.walker || this.statis()) return;
+      let x = 0, y = 0, ok = false;
+      if (this.line && this.line.getPointAtLength && this.len) {
+        try {
+          const pt = this.line.getPointAtLength(this.len * clamp(p, 0, 1));
+          if (pt) { x = pt.x; y = pt.y; ok = true; }
+        } catch (e) { ok = false; }
+      }
+      if (!ok && this.pts.length) {
+        const n = this.pts.length - 1;
+        const f = clamp(p, 0, 1) * n;
+        const k = Math.min(n, Math.floor(f)), t = f - k;
+        const a = this.pts[k], b = this.pts[Math.min(n, k + 1)];
+        x = lerp(a[0], b[0], t); y = lerp(a[1], b[1], t);
+      }
+      this.walker.style.transform = "translate3d(" + x.toFixed(1) + "px," + y.toFixed(1) + "px,0)";
+    },
+
+    /* --------------------------------------------------------------- reveal */
+
+    reveal() {
+      const self = this;
+      this.seen = this.stops.map(function (s) { return !!s.seen; });
+      if (this.statis()) { this.stops.forEach(function (s, k) { self.hit(k); }); return; }
+      /* Section dipin: reveal tiap titik dihitung di draw() dari posisi
+     horizontal track yang sedang tampil. */
+    },
+
+    /* Hanya thumb (900px) yang dipakai; dimuat saat titik masuk layar.
+       Tiap gambar yang selesai dimuat menjadwalkan ScrollTrigger.refresh()
+       (didebounce), karena tinggi lajur dan tinggi kartu bisa bergeser
+       setelah decode sehingga panjang scroll perlu dihitung ulang. */
+    loadThumbs(s) {
+      (s.photos || []).forEach(function (fig) {
+        const im = fig.querySelector("img");
+        if (!im || !im.dataset.src) return;
+        const src = im.dataset.src;
+        delete im.dataset.src;          /* src hanya boleh di-set satu kali */
+        im.addEventListener("load", function () { jejakRefreshSoon(); }, { once: true });
+        im.addEventListener("error", function () { jejakRefreshSoon(); }, { once: true });
+        im.src = src;
+      });
+    },
+
+    loadAllThumbs() {
+      this.stops.forEach(function (s) { this.loadThumbs(s); }, this);
+    },
+
+    /* satu titik: pin menancap memantul -> polaroid menempel -> label naik */
+    /* Tandai sudah tampil TANPA animasi. Dipakai saat track dibangun ulang
+       (resize atau gambar selesai dimuat) supaya foto yang tadi sudah muncul
+       tidak diputar ulang dari nol. */
+    shown(k) {
+      const s = this.stops[k];
+      if (!s) return;
+      if (!this.seen) this.seen = this.stops.map(function () { return false; });
+      this.seen[k] = true;
+      s.seen = true;
+      const semua = [s.pin].filter(Boolean).concat(s.photos || []);
+      if (this.statis()) {
+        semua.forEach(function (n) { n.style.opacity = "1"; });
+        $$("i", s.lab).forEach(function (q) { q.style.transform = "translateY(0)"; });
+        return;
+      }
+      gsap.set(semua, {
+        opacity: 1, scale: 1,
+        rotation: function (i, e2) { return parseFloat((e2 && e2.dataset.jr) || 0); }
+      });
+      $$("i", s.lab).forEach(function (q) { gsap.set(q, { y: 0 }); });
+    },
+
+    hit(k) {
+      const s = this.stops[k];
+      if (!s) return;
+      if (!this.seen) this.seen = this.stops.map(function () { return false; });
+      if (this.seen[k]) return;
+      this.seen[k] = true;
+      s.seen = true;
+      this.loadThumbs(s);
+      const lab = s.lab, pin = s.pin, fot = s.photos || [];
+
+      if (this.statis()) {
+        [pin].concat(fot).forEach(function (n) { if (n) n.style.opacity = "1"; });
+        $$("i", lab).forEach(function (q) { q.style.transform = "translateY(0)"; });
+        return;
+      }
+
+      const semua = [pin].filter(Boolean).concat(fot);
+      gsap.set(semua, { opacity: 0 });
+
+      const tl = gsap.timeline();
+      if (pin) {
+        tl.fromTo(pin,
+          { opacity: 0, rotation: -18, scale: 0.45 },
+          { opacity: 1, rotation: 0, scale: 1, duration: 0.36, ease: "back.out(3.2)",
+            transformOrigin: "50% 88%" }, 0);
+        const pantul = pin.querySelector(".pantul");
+        if (pantul) {
+          tl.fromTo(pantul,
+            { opacity: 0.85, scale: 0.35 },
+            { opacity: 0, scale: 1.8, duration: 0.6, ease: "power2.out",
+              transformOrigin: "50% 100%" }, 0.12);
+        }
+      }
+      if (fot.length) {
+        /* tiap polaroid berayun ke kemiringan resting-nya sendiri */
+        tl.fromTo(fot,
+          { opacity: 0, scale: 0.84, rotation: function (i, e2) { return parseFloat(e2.dataset.jr || 0) - 12; } },
+          { opacity: 1, scale: 1, rotation: function (i, e2) { return parseFloat(e2.dataset.jr || 0); },
+            duration: 0.54, ease: "back.out(1.8)", transformOrigin: "50% 6px",
+            stagger: 0.075 }, 0.18);
+      }
+      if (lab) {
+        $$("i", lab).forEach(function (q, j) {
+          tl.to(q, { y: 0, duration: 0.52, ease: "expo.out" }, 0.46 + j * 0.07);
+        });
+      }
+    },
+
+    /* ------------------------------------------------------------ scrub & track */
+
+    draw(prog) {
+      const p = clamp(prog, 0, 1);
+      this.prog = p;
+
+      if (this.line && this.len) this.line.style.strokeDashoffset = String((1 - p) * this.len);
+      this.walkerAt(p);
+
+      /* Reveal mengikuti posisi horizontal yang benar-benar tampil.
+         Dihitung dari kotak track yang sedang bergerak, bukan dari progress,
+         supaya foto muncul bersamaan dengan masuknya ke layar. Container
+         ScrollTrigger tidak dipakai di sini karena posisinya tidak bisa
+         dihitung saat track-nya sedang di-pin. */
+      if (!this.statis() && this.stops.length) {
+        const geser = Math.max(1, (this.m ? this.m.trackW : 0) - window.innerWidth);
+        const geserPx = p * geser;                    /* px yang sudah digeser */
+        const vw = window.innerWidth;
+        const n = this.stops.length;
+        const tol = vw * 0.06;
+        for (let k = 0; k < n; k++) {
+          const x = (this.pts[k] ? this.pts[k][0] : 0) - geserPx;
+          if (x <= vw - tol) this.hit(k);             /* sudah masuk layar */
+        }
+      }
+
+      /* petunjuk "gulir ke bawah" hilang begitu track mulai bergerak */
+      if (this.hint) {
+        const lewat = p > 0.012;
+        if (lewat !== this.hintOff) {
+          this.hintOff = lewat;
+          this.hint.classList.toggle("is-off", lewat);
+        }
+      }
+    },
+
+    /* Jarak yang digeser track = lebar track dikurangi lebar layar.
+       Tidak dipotong lagi: metrics() sudah membatasi jarak antar titik agar
+       jumlah ini tidak melebihi GULIR_MAKS_LAYAR, jadi ujung track selalu
+       bisa dicapai. */
+    trackScroll() {
+      const geser = Math.max(0, (this.m ? this.m.trackW : 0) - window.innerWidth);
+      return Math.round(Math.max(600, geser));
+    },
+
+    wire() {
+      if (!this.sec) return;
+      const self = this;
+      if (this.st) { this.st.kill(); this.st = null; }
+      if (this.anim) { this.anim.kill(); this.anim = null; }
+      if (this.statis()) { this.draw(1); return; }
+
+      /* Mekanisme yang sama untuk desktop dan HP: section dipin, scroll
+         vertikal menggeser track ke samping. Tidak ada touch handler apa pun,
+         jadi swipe vertikal di HP tetap milik browser dan Lenis. */
+      this.anim = gsap.to(this.map, {
+        x: function () { return -(self.m.trackW - window.innerWidth); },
+        ease: "none",
+        scrollTrigger: {
+          trigger: this.sec,
+          start: "top top",
+          end: function () { return "+=" + self.trackScroll(); },
+          pin: this.pin,
+          pinSpacing: true,
+          scrub: 0.6,
+          anticipatePin: 1,
+          invalidateOnRefresh: true,
+          onUpdate: function (s) { self.draw(s.progress); }
+        }
+      });
+      this.st = this.anim.scrollTrigger;
+
+      /* Reveal tiap titik ditangani draw() di atas, dari posisi horizontal
+         track yang sedang tampil. */
+      this.draw(0);
+    },
+
+    /* Dipanggil setelah font & gambar dimuat, dan tiap resize (debounce).
+       Panjang track menentukan tinggi scroll, jadi harus diukur ulang. */
+    refresh() {
+      if (!this.alive) return;
+      const w = Math.round(this.map.getBoundingClientRect().width) || 0;
+      const h = Math.round(this.pin.getBoundingClientRect().height) || 0;
+      if (w === this.lastW && h === this.lastH) { if (ST) ST.refresh(); return; }
+      this.lastW = w; this.lastH = h;
+      this.layout();
+      if (ST) ST.refresh();
+      /* gambar baru mengubah tinggi kartu -> trigger perlu dihitung ulang */
+      if (hasGSAP) ST.refresh();
+    },
+
+    mode() {
+      if (!this.alive) return;
+      this.lastW = 0; this.lastH = 0;
+      this.layout();
+      this.wire();
+      if (ST) ST.refresh();
+    }
+  };
+
+  /* helper kecil untuk modul Jejak ---------------------------------------- */
+
+  /* Jarak antar titik di layar. 50% lebar layar supaya polaroid punya ruang,
+     dibatasi 330..520px. Di HP layar sempit 50% itu masih kecil, jadi
+     langkah minimal 330px yang dipakai. */
+  function gap0(vw) { return Math.round(clamp(vw * 0.5, 330, 520)); }
+
+  /* Anggaran gulir: panjang scroll tidak boleh jauh lebih besar dari lebar
+     track (permintaan: tidak lebih dari sekitar 5 layar). Dipakai untuk
+     MEMBatasi jarak antar titik, bukan untuk memotong scroll - kalau scroll
+     dipotong, ujung track jadi tidak akan pernah terjangkau. */
+  const GULIR_MAKS_LAYAR = 5;
+
+  /* lebar polaroid dari tinggi lajur DAN lebar slot titik (lihat metrics()) */
+  function hitungJw(gap, laneH) {
+    const jwH = Math.round((laneH - 14 - 46) * 16 / 9);   /* 46 = caption + padding */
+    const jwW = Math.round((gap - 42) / 2);
+    return Math.round(clamp(Math.min(jwH, jwW), 76, 200));
+  }
+
+  /* ScrollTrigger.refresh() dijadwalkan, bukan dipanggil langsung: satu
+     screenshot bisa memuat puluhan gambar sekaligus, dan refresh di tengah
+     decode bikin layout melompat. */
+  let jejakRefreshT = 0;
+  function jejakRefreshSoon() {
+    if (!ST) return;
+    clearTimeout(jejakRefreshT);
+    jejakRefreshT = setTimeout(function () { ST.refresh(); }, 240);
+  }
+
+
+  /* thumbnail tanpa src: src disimpan di data-src supaya bisa dimuat saat
+     node benar-benar dekat viewport (dipakai modul Jejak) */
+  function thumbOf(p) {
+    const im = new Image();
+    im.decoding = "async";
+    im.loading = "lazy";
+    im.width = p.w || 1200;
+    im.height = p.h || 800;
+    im.alt = p.caption || "Foto dokumentasi KKN";
+    im.dataset.src = (p.small || p.src);
+    return im;
+  }
 
 
   /* ------------------------------------------------- 5c. madding (papan)
@@ -2532,6 +3286,7 @@
         { sel: "#stack",    name: "Tumpukan" },
         { sel: "#jemuran",  name: "Jemuran"  },
         { sel: "#rolfilm",  name: "Rol film" },
+        { sel: "#jejak",    name: "Jejak"    },
         { sel: "#galeri",   name: "Semua foto" },
         { sel: "#madding",  name: "Madding"  },
         { sel: "#catatan",  name: "Penutup"  }
@@ -2673,7 +3428,10 @@
 
     /* --- kursor kustom: circle + teks "Lihat" (state via :has di CSS) --- */
     const cursor = $(".cursor");
-    if (!cursor || !fine() || reduced()) return;
+    /* tanpa GSAP kursor ini tidak bisa bergerak sama sekali, jadi dilewati
+       seluruhnya. Sebelumnya hanya mengecek fine()/reduced(), sehingga galeri
+       yang tetap jalan tapi jejak/arsip berhenti dibangun. */
+    if (!cursor || !fine() || reduced() || !hasGSAP) return;
 
     const setX = gsap.quickTo(cursor, "x", { duration: 0.3, ease: "power3" });
     const setY = gsap.quickTo(cursor, "y", { duration: 0.3, ease: "power3" });
@@ -2830,7 +3588,13 @@
     const p = DATA[i];
     LB.capText.textContent = p.caption;
     LB.capMeta.textContent = "";
-    LB.capMeta.appendChild(el("span", null, pad2(i + 1) + " / " + pad2(TOTAL)));
+    /* counter mengikuti cakupan navigasi: per hari (Jejak), per baris (film),
+       atau seluruh arsip. Kalau tidak, Jejak akan menulis "65 / 171" padahal
+       foto itu tanggal pertama. */
+    const nav = LB.nav;
+    const pos = nav ? nav.indexOf(i) : -1;
+    LB.capMeta.appendChild(el("span", null,
+      pad2(pos >= 0 ? pos + 1 : i + 1) + " / " + pad2(nav ? nav.length : TOTAL)));
     LB.capMeta.appendChild(el("span", null, p.kategori));
     LB.capMeta.appendChild(el("span", null, p.tanggal));
     LB.img.alt = p.caption;
@@ -3240,6 +4004,7 @@
   function newSections() {
     Rope.build();
     Film.build();
+    Jejak.build();
     Madd.build();
     maddingUI();
     fallingLeaves();
@@ -3265,7 +4030,14 @@
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(refresh);
   window.addEventListener("load", refresh);
   let rz = 0;
-  window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(refresh, 200); });
+  window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(Jejak.refresh, 200); });
+
+  /* Jejak mengukur lebar peta & panjang jalur, jadi harus dihitung ulang
+     setelah font selesai dimuat dan setelah gambar masuk (tinggi bisa berubah). */
+  window.addEventListener("load", () => Jejak.refresh());
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => { Jejak.refresh(); });
+  }
 
   /* Masonry hanya untuk layar lebar. Di HP seluruh bagian "Semua foto"
      disembunyikan CSS karena Jemuran sudah menggantikan perannya, jadi tidak
@@ -3273,6 +4045,7 @@
   const onMode = () => {
     if (!mqPhone.matches) wallFallback();
     Film.mode();
+    Jejak.mode();
     if (ST) ST.refresh();
   };
   if (mqPhone.addEventListener) mqPhone.addEventListener("change", onMode);
