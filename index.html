@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Catatan Lapangan — KKN [Nama Desa] [Tahun]</title>
+<meta name="description" content="Dokumentasi visual KKN [Nama Kelompok] di [Nama Desa], [Tahun]. Lima puluh foto lapangan, disusun seperti jurnal." />
+<meta name="theme-color" content="#F3EBD8" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Catatan Lapangan — KKN [Nama Desa] [Tahun]" />
+<meta property="og:description" content="Lima puluh foto lapangan dari KKN [Nama Kelompok]." />
+<meta property="og:image" content="assets/foto/foto-01.webp" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..900,0..100,0..1&family=Space+Grotesk:wght@300..700&family=IBM+Plex+Mono:wght@400;500&display=swap" />
+<link rel="stylesheet" href="style.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231F3D2B'/%3E%3Ctext x='16' y='22' font-family='Georgia,serif' font-size='15' fill='%23F3EBD8' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E" />
+</head>
+
+<body>
+
+<!-- tekstur kertas: noise tipis, tidak menangkap klik -->
+<div class="grain" aria-hidden="true"></div>
+<!-- kursor kustom (desktop saja) -->
+<div class="cursor" aria-hidden="true"><span class="cursor__label">Lihat</span></div>
+
+<!-- indikator progres + penomoran foto -->
+<div class="rail" aria-hidden="true"><span class="rail__fill"></span></div>
+<div class="hud" aria-hidden="true">
+  <span class="hud__now">01</span><span class="hud__slash">/</span><span class="hud__all">20</span>
+</div>
+
+<!-- peta lompat cepat + tombol ke atas (HP saja) -->
+<div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="Lompat ke bagian halaman"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Bagian atas halaman">
+  <span class="scrub__track" aria-hidden="true"></span>
+  <span class="scrub__ticks" id="scrubTicks" aria-hidden="true"></span>
+  <span class="scrub__thumb" id="scrubThumb" aria-hidden="true"></span>
+</div>
+<button class="totop" id="toTop" type="button" aria-label="Kembali ke atas">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5M5 12l7-7 7 7" /></svg>
+</button>
+
+<!-- 1. Intro tirai -->
+<div class="curtain" id="curtain">
+  <div class="curtain__panel curtain__panel--l"></div>
+  <div class="curtain__panel curtain__panel--r"></div>
+  <div class="curtain__mid">
+    <p class="curtain__eyebrow">KKN <span data-slot="desa">[Nama Desa]</span> · <span data-slot="tahun">[Tahun]</span></p>
+    <p class="curtain__title">Catatan Lapangan</p>
+  </div>
+</div>
+
+<header class="topbar">
+  <a class="topbar__mark" href="#top">
+    <span class="topbar__mark-k">KKN</span>
+    <span class="topbar__mark-y" data-slot="tahun">[Tahun]</span>
+  </a>
+  <nav class="topbar__nav" aria-label="Bagian halaman">
+    <a href="#stack">Tumpukan</a>
+    <a href="#jemuran">Jemuran</a>
+    <a href="#galeri">Semua foto</a>
+    <a href="#madding">Madding</a>
+    <a href="#catatan">Catatan</a>
+  </nav>
+  <p class="topbar__where"><span data-slot="desa">[Nama Desa]</span>, <span data-slot="kelompok">[Nama Kelompok]</span></p>
+</header>
+
+<main id="top">
+
+  <!-- 2. Hero -->
+  <section class="hero">
+    <p class="hero__eyebrow"><span class="rule" aria-hidden="true"></span> KKN <span data-slot="desa">[Nama Desa]</span> · <span data-slot="tahun">[Tahun]</span></p>
+
+    <h1 class="hero__title">
+      <span class="line"><span class="line__in">Empat puluh</span></span>
+      <span class="line"><span class="line__in">hari di desa</span></span>
+      <span class="line line--tight"><span class="line__in">yang jaraknya selalu lebih jauh dari peta.</span></span>
+    </h1>
+
+    <div class="hero__body">
+      <p class="hero__lede">Sebagian besar waktu habis di jalan setapak, balai desa, dan sawah. Dokumentasi ini disusun berurutan seperti buku catatan, bukan seperti galeri pilihan.</p>
+      <ul class="hero__facts">
+        <li><b data-slot="hari">37</b><span>hari</span></li>
+        <li><b id="factTotal">50</b><span>foto</span></li>
+        <li><b>5</b><span>dusun</span></li>
+      </ul>
+    </div>
+
+    <div class="hero__float" id="heroFloat" aria-hidden="true"></div>
+    <canvas class="hero__leaves" id="heroLeaves" aria-hidden="true"></canvas>
+
+    <a class="cue" href="#stack"><span>Gulir</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v15M5 12l7 7 7-7" /></svg>
+    </a>
+  </section>
+
+  <!-- 3. Galeri kartu bertumpuk (satu kartu aktif; hanya foto ber deck:true) -->
+  <section class="stack" id="stack">
+    <div class="stack__head">
+      <p class="tag"><span class="tag__no">01</span> Tumpukan</p>
+      <h2 class="head">Dua puluh foto pilihan, satu per satu, berurutan dari yang pertama.</h2>
+    </div>
+    <div class="stack__viewport" id="stackViewport">
+      <div class="stack__pin">
+        <ul class="deck" id="deck" aria-label="Tumpukan foto dokumentasi"></ul>
+        <p class="stack__hint"><span class="rule" aria-hidden="true"></span> <span class="stack__hint-t" id="stackHint">gulir untuk membalik tumpukan</span></p>
+        <div class="deckctl" id="deckCtl">
+          <span class="deckctl__count"><b id="deckNow">01</b><i>/</i><span id="deckAll">20</span></span>
+          <span class="deckctl__btns">
+            <button class="deckctl__btn" id="deckPrev" type="button" aria-label="Foto sebelumnya">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8" /></svg>
+              <span>Sebelumnya</span>
+            </button>
+            <button class="deckctl__btn deckctl__btn--go" id="deckNext" type="button" aria-label="Foto berikutnya">
+              <span>Berikutnya</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8" /></svg>
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Jemuran: foto digantung di tali, digeser seperti bandul -->
+  <section class="rope" id="jemuran">
+    <div class="rope__head">
+      <p class="tag"><span class="tag__no">02</span> Jemuran</p>
+      <h2 class="head">Sisanya kami jemur di tali, menunggu cuaca cerah dan jam istirahat.</h2>
+    </div>
+
+    <div class="rope__bar">
+      <div class="rope__chips" id="ropeChips" role="group" aria-label="Filter kategori jemuran"></div>
+      <p class="rope__count"><b id="ropeNow">01</b><i>/</i><span id="ropeAll">50</span></p>
+    </div>
+
+    <div class="rope__stage" id="ropeStage" tabindex="0" role="group"
+         aria-label="Jemuran foto. Seret atau gunakan tombol panah untuk berpindah.">
+      <svg class="rope__cord" id="ropeCord" viewBox="0 0 1000 84" preserveAspectRatio="none" aria-hidden="true">
+        <path class="rope__shade" id="ropeShade" d="M0 34 Q 500 86 1000 34"></path>
+        <path class="rope__strand" id="ropeStrand" d="M0 34 Q 500 86 1000 34"></path>
+        <path class="rope__twist" id="ropeTwist" d="M0 34 Q 500 86 1000 34"></path>
+      </svg>
+      <span class="rope__nail rope__nail--l" aria-hidden="true">
+        <svg viewBox="0 0 30 34" aria-hidden="true">
+          <circle cx="15" cy="9" r="4.6" fill="#7C8C86" />
+          <path d="M15 12 L15 26" stroke="#8E9C93" stroke-width="2.4" stroke-linecap="round" />
+          <path d="M9 15 Q 15 21 21 15" fill="none" stroke="#2A4A34" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </span>
+      <span class="rope__nail rope__nail--r" aria-hidden="true">
+        <svg viewBox="0 0 30 34" aria-hidden="true">
+          <circle cx="15" cy="9" r="4.6" fill="#7C8C86" />
+          <path d="M15 12 L15 26" stroke="#8E9C93" stroke-width="2.4" stroke-linecap="round" />
+          <path d="M9 15 Q 15 21 21 15" fill="none" stroke="#2A4A34" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </span>
+      <ul class="rope__track" id="ropeTrack"></ul>
+    </div>
+
+    <div class="rope__ctl">
+      <button class="ropebtn" id="ropePrev" type="button" aria-label="Foto jemuran sebelumnya">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8" /></svg>
+        <span>Sebelumnya</span>
+      </button>
+      <button class="ropebtn ropebtn--go" id="ropeNext" type="button" aria-label="Foto jemuran berikutnya">
+        <span>Berikutnya</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8" /></svg>
+      </button>
+    </div>
+    <p class="rope__hint"><span class="rule" aria-hidden="true"></span> <span id="ropeHint">seret ke samping, atau pakai tombol panah</span></p>
+  </section>
+
+  <!-- 4b. Rol film (KHUSUS HP <= 768px; di desktop tidak dirender sama sekali).
+       Dua strip negatif film yang masuk bergantian dari kiri dan kanan, digerakkan
+       penuh oleh scroll (pin + scrub), tidak bisa diklik. Kontennya dibangun
+       script.js dari 14 foto ber- film:true di data/photos.js. -->
+  <section class="film" id="rolfilm" aria-hidden="true">
+    <div class="film__pin" id="filmPin">
+      <p class="film__cue" id="filmCue">gulir pelan</p>
+      <div class="film__roll film__roll--1" id="filmRoll1"></div>
+      <div class="film__roll film__roll--2" id="filmRoll2"></div>
+    </div>
+  </section>
+
+  <!-- 5. Semua foto: masonry di desktop (HP dilewati, semua fotonya ada di Jemuran) -->
+  <section class="wall" id="galeri">
+    <div class="wall__head">
+      <p class="tag"><span class="tag__no">03</span> Semua foto</p>
+      <h2 class="head">Sisa bingkai, dikelompokkan per kegiatan.</h2>
+      <ul class="legend" id="legend"></ul>
+    </div>
+    <div class="wall__grid" id="wallGrid"></div>
+  </section>
+
+  <!-- 6. Madding: papan catatan untuk teman-teman -->
+  <section class="madding" id="madding">
+    <div class="madding__head">
+      <p class="tag"><span class="tag__no">04</span> Madding</p>
+      <h2 class="head">Papan ini milik kita semua. Tinggal selip kertas, tanpa perlu akun.</h2>
+      <div class="madding__tools">
+        <button class="padbtn" id="padOpen" type="button">
+          <span class="padbtn__face">Tempel<br />catatan</span>
+        </button>
+        <p class="madding__note" id="padCount">Memuat papan…</p>
+      </div>
+      <p class="madding__demo" id="padDemo" hidden>Mode demo: catatan tidak tersimpan online.</p>
+    </div>
+    <div class="madding__wrap">
+      <p class="madding__tally" id="padTally" aria-live="polite"><b>0</b><i>/</i><span>16</span></p>
+      <div class="madding__board" id="padBoard">
+        <div class="madding__frame" aria-hidden="true"></div>
+        <div class="madding__cloth" id="padCloth"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Penutup (latar berubah ke hijau tua) -->
+  <section class="closing" id="catatan">
+    <div class="closing__veil" aria-hidden="true"></div>
+    <div class="closing__inner">
+      <p class="tag tag--light"><span class="tag__no">05</span> Penutup</p>
+      <h2 class="head head--light">Yang belum selesai.</h2>
+      <ul class="todo">
+        <li><span>01</span> Jembatan bambu di RT 08 masih perlu diganti tahun depan.</li>
+        <li><span>02</span> Data padatan tani masih berupa catatan tangan, belum masuk ke tabel digital.</li>
+        <li><span>03</span> Katalog produk UMKM desa belum ada, semua masih dipajang di lapak depan.</li>
+      </ul>
+      <p class="closing__note">Tiga hal di atas kami serahkan ke desa, karena memang bukan tugas kami. Desa tetap jalan seperti biasa: lukis, siram, ukir. Sampai ketemu lagi, Juli 2027.</p>
+      <p class="closing__credit">
+        Foto &amp; teks <span data-slot="kelompok">[Nama Kelompok]</span> ·
+        <span data-slot="universitas">[Nama Universitas]</span> ·
+        <span data-slot="desa">[Nama Desa]</span>, <span data-slot="tahun">[Tahun]</span>
+      </p>
+      <a class="cue cue--light" href="#top"><span>Kembali ke atas</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5M5 12l7-7 7 7" /></svg>
+      </a>
+    </div>
+  </section>
+
+</main>
+
+<!-- 6. Lightbox -->
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Foto dokumentasi" hidden>
+  <div class="lb__scrim"></div>
+  <button class="lb__btn lb__close" type="button" aria-label="Tutup tampilan foto">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+  </button>
+  <button class="lb__btn lb__prev" type="button" aria-label="Foto sebelumnya">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8" /></svg>
+  </button>
+  <button class="lb__btn lb__next" type="button" aria-label="Foto berikutnya">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8" /></svg>
+  </button>
+  <figure class="lb__fig">
+    <img class="lb__img" alt="" />
+    <figcaption class="lb__cap">
+      <p class="lb__cap-text"></p>
+      <p class="lb__cap-meta"></p>
+    </figcaption>
+  </figure>
+</div>
+
+<noscript>
+  <p style="padding:2rem;font-family:system-ui">Galeri ini dirender dengan JavaScript. Aktifkan JavaScript, atau lihat folder <code>assets/foto/</code> dan <code>data/photos.js</code> secara langsung.</p>
+</noscript>
+
+<!-- 8. Tirai transisi antar-bagian -->
+<div class="wipe" id="wipe" aria-hidden="true">
+  <i class="wipe__panel wipe__panel--t"></i>
+  <i class="wipe__panel wipe__panel--b"></i>
+</div>
+
+<!-- 9. Modal: tempel catatan baru -->
+<div class="pad" id="padModal" role="dialog" aria-modal="true" aria-labelledby="padTitle" hidden>
+  <div class="pad__scrim" data-pad-close></div>
+  <div class="pad__sheet">
+    <p class="pad__eyebrow">Madding · catatan baru</p>
+    <h3 class="pad__title" id="padTitle">Tempel satu kalimat di papan.</h3>
+
+    <div class="pad__pair">
+      <div class="pad__field">
+        <label class="pad__lab" for="padName">Nama</label>
+        <input class="pad__in" id="padName" type="text" maxlength="20" autocomplete="name"
+               placeholder="Siapa yang nempel ini?" spellcheck="false" />
+        <span class="pad__hint" id="padNameHint">maksimal 20 huruf</span>
+      </div>
+      <div class="pad__prev" id="padPrev" aria-hidden="true">
+        <span class="pad__prev-tape"></span>
+        <span class="pad__prev-msg" id="padPrevMsg">Pesanmu akan tampil di sini.</span>
+        <span class="pad__prev-by" id="padPrevBy">—</span>
+      </div>
+    </div>
+
+    <div class="pad__field">
+      <span class="pad__lab">Kertas</span>
+      <div class="pad__sw" id="padSw" role="group" aria-label="Pilihan warna kertas"></div>
+    </div>
+
+    <div class="pad__field">
+      <label class="pad__lab" for="padMsg">Pesan</label>
+      <textarea class="pad__ta" id="padMsg" rows="3" maxlength="100"
+                placeholder="Tulis satu kalimat buat teman-teman KKN." spellcheck="false"></textarea>
+      <span class="pad__count" id="padCount2">0/100</span>
+    </div>
+
+    <!-- jebakan bot: diisi diam-diam, isinya dibuang server -->
+    <div class="pad__hpwrap" aria-hidden="true">
+      <label for="padHp">Jangan diisi</label>
+      <input id="padHp" type="text" tabindex="-1" autocomplete="off" name="website" />
+    </div>
+
+    <p class="pad__err" id="padErr" role="alert"></p>
+
+    <div class="pad__acts">
+      <button class="padbtn padbtn--flat" id="padCancel" type="button" data-pad-close>Batal</button>
+      <button class="padbtn" id="padSend" type="button"><span class="padbtn__face">Tempel</span></button>
+    </div>
+    <p class="pad__foot">Tanpa nama akun. Catatan disimpan di papan galeri ini saja.</p>
+  </div>
+</div>
+
+<!-- 10. Modal: baca satu catatan -->
+<div class="pad pad--read" id="padRead" role="dialog" aria-modal="true" aria-labelledby="padReadMsg" hidden>
+  <div class="pad__scrim" data-read-close></div>
+  <div class="pad__sheet pad__sheet--read">
+    <div class="pad__big" id="padBig">
+      <span class="pad__prev-tape"></span>
+      <p class="pad__big-msg" id="padReadMsg"></p>
+      <p class="pad__big-by" id="padReadBy"></p>
+    </div>
+    <div class="pad__acts pad__acts--read">
+      <button class="padbtn padbtn--pull" id="padPull" type="button">
+        <span class="padbtn__face">Cabut catatan</span>
+      </button>
+      <button class="padbtn padbtn--flat" id="padReadClose" type="button" data-read-close>Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- 11. Toast kertas: catatan dicabut, masih bisa diurutkan (5 detik) -->
+<div class="memo" id="padToast" role="status" aria-live="polite" hidden>
+  <span class="memo__tape" aria-hidden="true"></span>
+  <span class="memo__text" id="padToastText">Catatan dicabut.</span>
+  <span class="memo__num" id="padToastNum" aria-hidden="true">5</span>
+  <button class="memo__undo" id="padToastUndo" type="button">Urutkan</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+<script src="data/photos.js" defer></script>
+<script src="script.js" defer></script>
+</body>
+</html>

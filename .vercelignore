@@ -1,0 +1,11 @@
+# Foto mentah dari kamera (~637 MB) tidak pernah dipakai halaman.
+# Yang di-deploy hanya assets/foto/ (WebP hasil optimasi, 18 MB).
+# Pola ditulis eksplisit, tanpa negasi, supaya tidak pernah ikut ter-deploy.
+assets/IMG_*
+assets/*.JPG
+assets/*.HEIC
+assets/*.jpeg
+assets/*.jpg
+
+# Placeholder lama (50 file ~10 KB), sudah tidak dirujuk data/photos.js.
+images/
