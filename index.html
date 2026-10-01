@@ -400,6 +400,67 @@
   <button class="memo__undo" id="padToastUndo" type="button">Urutkan</button>
 </div>
 
+<!-- 12. Pemutar musik: satu kaset analog di pojok kanan bawah, duduk persis di
+     atas tombol "ke atas" yang sudah ada. Tidak ada autoplay: tidak ada file
+     audio yang diunduh sampai pengunjung menekan putar. Judul, artis, dan
+     nama file diatur di array TRACKS (script.js, bagian paling atas).
+     Widget disembunyikan saat lightbox, modal madding, atau tirai intro
+     terbuka supaya tidak menutupi apa pun. -->
+<div class="tape" id="tape" data-open="false">
+
+  <div class="tape__panel" id="tapePanel">
+
+    <!-- area geser: kaset ikut jari, lalu meluncur ke lagu berikutnya -->
+    <div class="tape__stage" id="tapeStage" tabindex="0" role="group"
+         aria-label="Kaset aktif. Geser ke samping atau pakai tombol panah untuk mengganti lagu.">
+      <div class="tape__cas" id="tapeCas" aria-hidden="true">
+        <span class="tape__screw"></span>
+        <span class="tape__screw tape__screw--b"></span>
+        <span class="tape__label">
+          <b class="tape__lt" id="tapeTitle">Lagu</b>
+          <i class="tape__la" id="tapeArtist">—</i>
+        </span>
+        <span class="tape__win">
+          <i class="tape__reel"></i>
+          <i class="tape__reel"></i>
+        </span>
+      </div>
+    </div>
+
+    <p class="tape__name" id="tapeName">—</p>
+
+    <div class="tape__ctl">
+      <button class="tape__arrow" id="tapePrev" type="button" aria-label="Lagu sebelumnya">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8" /></svg>
+      </button>
+      <button class="tape__play" id="tapePlay" type="button" aria-label="Putar musik" aria-pressed="false">
+        <svg class="tape__i tape__i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2l11 6.8-11 6.8z" /></svg>
+        <svg class="tape__i tape__i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14" /></svg>
+      </button>
+      <button class="tape__arrow" id="tapeNext" type="button" aria-label="Lagu berikutnya">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8" /></svg>
+      </button>
+    </div>
+
+    <p class="tape__side" id="tapeSide">Sisi A</p>
+    <p class="tape__dots" id="tapeDots" hidden></p>
+
+    <p class="tape__hint" id="tapeHint">geser untuk ganti lagu</p>
+    <p class="tape__status" id="tapeStatus"></p>
+    <p class="tape__say" id="tapeSay" role="status" aria-live="polite"></p>
+  </div>
+
+  <button class="tape__fab" id="tapeFab" type="button" aria-expanded="false"
+          aria-controls="tapePanel" aria-label="Buka pemutar musik">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2.6" y="5.4" width="18.8" height="13.2" rx="2.4" />
+      <circle cx="8.4" cy="12" r="2.3" />
+      <circle cx="15.6" cy="12" r="2.3" />
+      <path d="M6.7 8.5h10.6" />
+    </svg>
+  </button>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>

@@ -24,6 +24,33 @@
   const JEJAK_TOTAL = 40;
   const PER_TITIK   = 4;
 
+  /* ================================================================== MUSIK
+     Daftar lagu untuk kaset di pojok kanan bawah. Cukup ubah baris ini:
+     tambah entry = tambah lagu (jumlahny bebas, seluruh widget menyesuaikan).
+
+        title  : judul di label kaset (tulisan tangan)
+        artist : nama artis di bawahnya
+        file   : path file mp3 relatif terhadap index.html
+
+     Musik TIDAK pernah autoplay: tidak ada satu pun file yang diunduh sampai
+     pengunjung menekan tombol putar. Ganti judul/artis di bawah sesuai
+     keinginan Anda, file dan pemutarannya tidak perlu disentuh lagi. */
+
+  const TRACKS = [
+    { title: "Kisah Klasik", artist: "Sheila On 7", file: "music/kisah-klasik.mp3?v=3" },
+    { title: "Pamit",        artist: "Tulus",        file: "music/pamit.mp3?v=3" }
+  ];
+
+  /* Volume default. 0..1 — ini level musik setelah fade-in, bukan volume
+     maksimal: naik pelan dari 0 ke VOL_AWAL selama VOL_NAIK detik. */
+  const VOL_AWAL = 0.5;
+  const VOL_NAIK = 1.5;    /* detik: 0 -> VOL_AWAL saat mulai */
+  const VOL_TURUN= 0.4;    /* detik: volume -> 0 sebelum dijeda */
+  const XFADE    = 0.4;    /* detik: crossfade ganti lagu */
+  const SWIPE_MIN= 40;     /* px: jarak geser cukup untuk ganti lagu */
+  const SWIPE_V  = 0.45;   /* px/ms: lemparan cepat juga cukup */
+  const TAPE_SIMPAN = "galeri-kkn-tape";
+
   /* ---------------------------------------------------------------- 0. util */
 
   const DATA  = window.PHOTOS || [];
@@ -189,7 +216,7 @@
       li.dataset.depth = "-1";
       li.setAttribute("role", "img");
       const fig = el("figure");
-      fig.style.cssText = "margin:0;height:100%";
+      fig.style.margin = "0";
       const im = new Image();
       im.decoding = "async";
       im.loading = "lazy";
@@ -1152,7 +1179,9 @@
       s.li.dataset.photo = String(i);
       s.li.dataset.pos = String(n);
       s.li.setAttribute("aria-label",
-        "Foto " + (i + 1) + " — " + p.kategori + ", " + p.tanggal + ". Buka foto.");
+        "Foto " + (i + 1) + " — " + p.kategori + ", " + p.tanggal + ". " +
+        (p.caption || "") + " Buka foto.");
+
       s.img.width = p.w || 1200;
       s.img.height = p.h || 800;
       if (s.img.getAttribute("src") !== p.src) s.img.src = p.src;
@@ -3548,13 +3577,24 @@
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
 
-  /* kotak panggung: contain-fit, sisakan ruang untuk caption */
+  /* kotak panggung: contain-fit, sisakan ruang untuk caption.
+     Ruang bawah diambil dari tinggi caption yang BENAR-BENAR di layar, bukan
+     angka tetap: caption panjang (3+ baris) tidak boleh naik sampai menimpa
+     foto, dan caption pendek tidak menyisakan ruang kosong yang sia-sia. */
   function lbBox() {
     const padX   = window.innerWidth < 700 ? 14 : 76;
     const padTop = 64;
-    const padBot = window.innerHeight < 560 ? 96 : 140;
+    let capH = 0;
+    try {
+      if (LB.cap) {
+        const r = LB.cap.getBoundingClientRect();
+        if (r.height) capH = Math.min(r.height, window.innerHeight * 0.45);
+      }
+    } catch (e) { /* nol: pakai nilai bawaan */ }
+    const padBot = Math.round(clamp(capH + 34, window.innerHeight < 560 ? 96 : 140,
+                                   window.innerHeight * 0.5));
     const wAvail = window.innerWidth - padX * 2;
-    const hAvail = window.innerHeight - padTop - padBot;
+    const hAvail = Math.max(40, window.innerHeight - padTop - padBot);
     const p = DATA[LB.index] || { w: 4, h: 3 };
     const ar = (p.w || 4) / (p.h || 3);
     let w = wAvail, h = w / ar;
@@ -3999,6 +4039,562 @@
       .to(Wipe.panels, { scaleY: 0, duration: 0.42, ease: "power3.out" }, "+=0.06");
   }
 
+  /* ================================================================= TUGAS 1
+     9e. PEMUTAR KASET
+
+     Widget kecil di pojok kanan bawah (di atas tombol ke atas). Semua yang
+     boleh diubah ada di bagian atas file: array TRACKS dan VOL_AWAL.
+
+     Aturan yang dijaga modul ini:
+       - tidak ada autoplay; tidak ada unduhan apa pun sebelum putar pertama
+       - loop mulus: Web Audio (decodeAudioData + AudioBufferSourceNode loop),
+         fallback <audio loop> dengan fade pendek di sekitar titik ulang
+       - volume naik pelan dari 0 saat mulai, turun pelan sebelum dijeda
+       - ganti lagu = crossfade singkat; di HP = geser horizontal
+       - tab disembunyikan -> dijeda, dan TIDAK dilanjut sendiri
+       - error unload = pesan "musik tidak tersedia", halaman tetap utuh
+     -------------------------------------------------------------------- */
+
+  /* easing kecil untuk tween geser (rAF sendiri: tidak bergantung GSAP) */
+  const easeOut  = (k) => 1 - Math.pow(1 - k, 3);
+  const easeIn   = (k) => k * k * k;
+  const easeBack = (k) => { const c = 1.7; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+
+  const Tape = {
+    i: 0,
+    playing: false,
+    loading: false,
+    dead: false,
+    open: false,
+    hinted: false,
+    mode: "",            /* "wa" = Web Audio, "au" = <audio> */
+    ctx: null,
+    src: null,
+    gain: null,
+    bufs: null,
+    au: null,
+    auFading: 0,
+    seq: 0,              /* penanda tween geser yang sah */
+    raf: 0,
+    vraf: 0,
+
+    /* ------------------------------------------------------------ 1. pasang */
+    build() {
+      this.root = $("#tape");
+      if (!this.root || !TRACKS.length) { this.root = null; return; }
+      this.fab     = $("#tapeFab");
+      this.panel   = $("#tapePanel");
+      this.stage   = $("#tapeStage");
+      this.cas     = $("#tapeCas");
+      this.title   = $("#tapeTitle");
+      this.artist  = $("#tapeArtist");
+      this.name    = $("#tapeName");
+      this.side    = $("#tapeSide");
+      this.dots    = $("#tapeDots");
+      this.hint    = $("#tapeHint");
+      this.status  = $("#tapeStatus");
+      this.say2    = $("#tapeSay");
+      this.playBtn = $("#tapePlay");
+      this.prevBtn = $("#tapePrev");
+      this.nextBtn = $("#tapeNext");
+      this.bufs = new Map();
+
+      this.baca();
+      this.wire();
+      this.geser();
+      this.paint();
+    },
+
+    wire() {
+      const self = this;
+
+      if (this.fab) {
+        this.fab.addEventListener("click", function () { self.buka(); });
+      }
+      if (this.playBtn) {
+        this.playBtn.addEventListener("click", function () { self.toggle(); });
+      }
+      if (this.prevBtn) {
+        this.prevBtn.addEventListener("click", function () { self.ke(self.i - 1); });
+      }
+      if (this.nextBtn) {
+        this.nextBtn.addEventListener("click", function () { self.ke(self.i + 1); });
+      }
+
+      /* panah kiri/kanan + spasi, selama widget dipakai */
+      this.root.addEventListener("keydown", function (e) {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        if (e.key === "ArrowLeft")  { e.preventDefault(); self.ke(self.i - 1); }
+        else if (e.key === "ArrowRight") { e.preventDefault(); self.ke(self.i + 1); }
+        else if (e.key === " " || e.key === "Spacebar") {
+          if (e.target === self.stage) { e.preventDefault(); self.toggle(); }
+        }
+      });
+
+      document.addEventListener("pointerdown", function (e) {
+        if (!self.open) return;
+        if (self.root.contains(e.target)) return;
+        self.buka(false);
+      }, true);
+
+      document.addEventListener("keydown", function (e) {
+        if (e.key !== "Escape" || !self.open) return;
+        if (document.getElementById("lb").classList.contains("is-open")) return;
+        self.buka(false);
+        if (self.fab) self.fab.focus();
+      });
+
+      /* tab disembunyikan: turunkan volume dulu, lalu berhenti. Kalau visitors
+         kembali ke tab, musik TIDAK dinyalakan lagi. */
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden && self.playing) self.jeda();
+      });
+
+      this.media();
+    },
+
+    /* ------------------------------------------------- 2. tampilkan isi widget */
+    paint() {
+      const self = this;
+      const t = TRACKS[this.i] || {};
+      const nama = t.title || "Lagu";
+      const artis = t.artist || "—";
+
+      if (this.title)  this.title.textContent = nama;
+      if (this.artist) this.artist.textContent = artis;
+      if (this.name)   this.name.textContent = nama + (artis === "—" ? "" : " · " + artis);
+      if (this.stage) {
+        this.stage.setAttribute("aria-label",
+          "Kaset aktif: " + nama + ", " + artis + ", lagu " + (this.i + 1) +
+          " dari " + TRACKS.length + ". Geser atau pakai tombol panah untuk mengganti lagu.");
+      }
+      if (this.hint) this.hint.hidden = this.hinted;
+
+      /* dua lagu = "Sisi A / Sisi B"; lebih dari dua = titik indikator */
+      if (this.side) {
+        this.side.hidden = TRACKS.length > 2;
+        this.side.textContent = this.i === 0 ? "Sisi A" : "Sisi B";
+      }
+      if (this.dots) {
+        this.dots.hidden = TRACKS.length <= 2;
+        if (TRACKS.length > 2) {
+          if (this.dots.childElementCount !== TRACKS.length) {
+            this.dots.textContent = "";
+            for (let k = 0; k < TRACKS.length; k++) this.dots.appendChild(el("i"));
+          }
+          $$("i", this.dots).forEach(function (d, k) { d.classList.toggle("is-on", k === self.i); });
+        }
+      }
+
+      if (window.MediaMetadata && "mediaSession" in navigator) {
+        try {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: nama, artist: artis, album: "Catatan Lapangan"
+          });
+        } catch (e) { /* browser lama: abaikan */ }
+      }
+      this.paintPlay();
+    },
+
+    paintPlay() {
+      const on = this.playing;
+      this.root.classList.toggle("is-playing", !!on);
+      this.root.classList.toggle("is-loading", !!this.loading);
+      if (this.playBtn) {
+        this.playBtn.setAttribute("aria-pressed", on ? "true" : "false");
+        this.playBtn.setAttribute("aria-label",
+          this.loading ? "Memuat musik" : on ? "Jeda musik" : "Putar musik");
+      }
+    },
+
+    /* pesan kecil di panel (hilang sendiri), dan status untuk screen reader */
+    say(pesan, bersihkan) {
+      if (this.status) this.status.textContent = pesan || "";
+      clearTimeout(this.statT);
+      if (pesan && bersihkan !== false) {
+        const self = this;
+        this.statT = setTimeout(function () {
+          if (self.status && self.status.textContent === pesan) self.status.textContent = "";
+        }, 2600);
+      }
+    },
+    sr(pesan) { if (this.say2) this.say2.textContent = pesan || ""; },
+
+    /* ---------------------------------------------------- 3. buka / tutup panel */
+    buka(force) {
+      const self = this;
+      this.open = force == null ? !this.open : !!force;
+      this.root.dataset.open = this.open ? "true" : "false";
+      if (this.fab) {
+        this.fab.setAttribute("aria-expanded", this.open ? "true" : "false");
+        this.fab.setAttribute("aria-label", this.open ? "Tutup pemutar musik" : "Buka pemutar musik");
+      }
+      if (this.open && this.stage) setTimeout(function () { self.stage.focus(); }, 260);
+    },
+
+    /* ============================================================ 4. audio
+       Satu jalur Web Audio untuk loop mulus, satu jalur <audio> cadangan.
+       Keduanya di balik API yang sama supaya sisa modul tidak peduli. */
+
+    ac() {
+      if (this.ctx) return this.ctx;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      try { this.ctx = new AC(); } catch (e) { this.ctx = null; }
+      return this.ctx;
+    },
+
+    /* ambil + decode satu lagu. Dipanggil untuk lagu terpilih saat putar
+       pertama, lalu lagu lain diam-diam setelahnya (prefetch). */
+    buf(n) {
+      const t = TRACKS[n];
+      if (!t) return Promise.reject(new Error("tidak ada lagu"));
+      if (this.bufs.has(n)) return Promise.resolve(this.bufs.get(n));
+      const self = this;
+      return fetch(t.file, { cache: "force-cache" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("http " + r.status);
+          return r.arrayBuffer();
+        })
+        .then(function (ab) {
+          const c = self.ac();
+          if (!c) throw new Error("tanpa web audio");
+          /* decodeAudioData masih bisa versi lama (callback) */
+          return new Promise(function (res, rej) {
+            const p = c.decodeAudioData(ab, res, rej);
+            if (p && p.then) p.then(res, rej);
+          });
+        })
+        .then(function (b) { self.bufs.set(n, b); return b; });
+    },
+
+    /* sumber baru mulai: volume 0 -> VOL_AWAL. Kalau crossfade, lagu lama
+       turun duluan supaya tidak ada cut. */
+    mulaiBuf(cross) {
+      const c = this.ac();
+      const b = this.bufs.get(this.i);
+      if (!c || !b) return false;
+      const t0 = c.currentTime;
+      const g = c.createGain();
+      const s = c.createBufferSource();
+      s.buffer = b;
+      s.loop = true;                       /* loop tanpa celah, tanpa jeda */
+      g.gain.value = 0;
+      g.connect(c.destination);
+      s.connect(g);
+      try { s.start(t0); } catch (e) { return false; }
+      g.gain.linearRampToValueAtTime(VOL_AWAL, t0 + (cross ? XFADE : VOL_NAIK));
+      this.stopBuf(cross ? XFADE : 0.001);
+      this.src = s;
+      this.gain = g;
+      this.mode = "wa";
+      return true;
+    },
+
+    /* SOURCE lama: turun ke 0 lalu dimatikan, tidak pernah "diam di tengah" */
+    stopBuf(dur) {
+      const s = this.src, g = this.gain;
+      if (!s) return;
+      this.src = null;
+      this.gain = null;
+      try {
+        const c = this.ctx;
+        const t0 = c.currentTime;
+        g.gain.cancelScheduledValues(t0);
+        g.gain.setValueAtTime(g.gain.value, t0);
+        g.gain.linearRampToValueAtTime(0, t0 + dur);
+        s.stop(t0 + dur + 0.03);
+        setTimeout(function () { try { g.disconnect(); } catch (e) {} }, (dur + 0.2) * 1000);
+      } catch (e) {
+        try { s.stop(); } catch (e2) {}
+      }
+    },
+
+    /* ------------------------------------------------------- jalur <audio> */
+    mulaiAu() {
+      const t = TRACKS[this.i];
+      if (!t) return false;
+      const self = this;
+      const au = this.au || (this.au = new Audio());
+      au.loop = true;
+      au.preload = "auto";
+      au.src = t.file;
+      au.volume = 0;
+      this.mode = "au";
+
+      /* assignment, bukan addEventListener: ganti lagu berkali-kali tidak
+         boleh menumpuk handler yang sama. */
+      au.onerror = function () { self.gagal(); };
+      au.ontimeupdate = function () {
+        /* loop <audio> selalu menyisakan jeda kecil: kecilkan volume
+           sebentar di ujung, naikkan lagi setelah titik ulang. */
+        const d = au.duration;
+        if (!d || isNaN(d)) return;
+        const kiri = d - au.currentTime;
+        if (kiri < 0.12) self.rampAu(0, 0.1);
+        else if (au.currentTime < 0.25) self.rampAu(VOL_AWAL, 0.18);
+      };
+
+      const p = au.play();
+      if (p && p.catch) p.catch(function () {
+        /* play() bisa ditolak (butuh gestur / format tak didukung). Jangan
+           pernah mengulang otomatis di sini, kalau tidak request bisa
+           berulang tanpa henti. Kegagalan isi file ditangani au.onerror. */
+        if (!self.dead && !self.playing) {
+          self.loading = false;
+          self.paintPlay();
+        }
+      });
+      this.rampAu(VOL_AWAL, VOL_NAIK);
+      return true;
+    },
+
+    rampAu(ke, detik) {
+      const au = this.au;
+      if (!au) return;
+      cancelAnimationFrame(this.vraf);
+      const dari = au.volume;
+      if (reduced() || detik <= 0) { au.volume = ke; return; }
+      const t0 = performance.now();
+      const self = this;
+      const tick = function (t) {
+        const k = clamp((t - t0) / (detik * 1000), 0, 1);
+        au.volume = dari + (ke - dari) * easeOut(k);
+        if (k < 1) self.vraf = requestAnimationFrame(tick);
+      };
+      this.vraf = requestAnimationFrame(tick);
+    },
+
+    jedaAu() {
+      const au = this.au;
+      if (!au) return;
+      this.rampAu(0, VOL_TURUN);
+      const self = this;
+      setTimeout(function () { if (!self.playing) try { au.pause(); } catch (e) {} },
+        reduced() ? 0 : VOL_TURUN * 1000);
+    },
+
+    /* ---------------------------------------------------------- 5. tombol */
+    toggle() {
+      if (this.dead) return;
+      if (this.playing) this.jeda();
+      else this.main();
+    },
+
+    main() {
+      const self = this;
+      if (this.dead || this.playing || this.loading) return;
+      const c = this.ac();
+      if (c && c.state === "suspended" && c.resume) c.resume();
+      this.loading = true;
+      this.say("memuat…", false);
+      this.paintPlay();
+      const n = this.i;
+
+      /* Coba jalur Web Audio dulu (loop mulus). Kalau decode atau AudioContext
+        tidak tersedia, jatuh ke <audio loop>. */
+      const hidup = function (cross) {
+        if (self.mulaiBuf(cross) || self.mulaiAu()) {
+          self.playing = true;
+          self.paintPlay();
+          self.sr("Memutar " + (TRACKS[n].title || "lagu"));
+          return true;
+        }
+        self.gagal();
+        return false;
+      };
+
+      this.buf(n).then(function () {
+        self.loading = false;
+        self.say("");
+        if (hidup(false)) self.prefetch();
+      }).catch(function () {
+        self.loading = false;
+        self.say("");
+        hidup(false);
+      });
+    },
+
+    /* diam-diam ambil lagu lain supaya swipe berikutnya tidak nunggu */
+    prefetch() {
+      const self = this;
+      TRACKS.forEach(function (_, k) {
+        if (self.bufs.has(k)) return;
+        const go = function () { self.buf(k).catch(function () {}); };
+        if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 4000 });
+        else setTimeout(go, 700 + k * 350);
+      });
+    },
+
+    jeda() {
+      if (!this.playing) return;
+      this.playing = false;
+      if (this.mode === "wa") this.stopBuf(VOL_TURUN);
+      else this.jedaAu();
+      this.paintPlay();
+      this.sr("Dijeda");
+    },
+
+    /* --------------------------------------------------------- 6. ganti lagu
+      Dari panel mana pun (panah, tombol, geser). Kalau sedang diputar, lagu
+       baru langsung mulai dengan crossfade; kalau dijeda, tetap dijeda. */
+    ke(n) {
+      const total = TRACKS.length;
+      const nn = ((n % total) + total) % total;
+      this.hinted = true;
+      this.i = nn;
+      this.simpan();
+      this.paint();
+      if (!this.playing) return;
+
+      const self = this;
+      this.loading = true;
+      this.paintPlay();
+      const done = function () {
+        self.loading = false;
+        self.paintPlay();
+        self.sr("Lagu " + (nn + 1) + " dari " + total + ": " + (TRACKS[nn].title || ""));
+      };
+      if (this.mode === "au") {
+        this.jedaAu();
+        this.mulaiAu();
+        done();
+        return;
+      }
+      this.buf(nn).then(function () {
+        if (!self.playing) { done(); return; }
+        if (!self.mulaiBuf(true)) { if (!self.mulaiAu()) self.gagal(); }
+        done();
+      }).catch(function () { self.gagal(); done(); });
+    },
+
+    /* --------------------------------------------- 7. geser (Pointer Events)
+       Kaset mengikuti jari. Lepas dengan jarak cukup: yang lama meluncur
+       keluar, lalu yang baru masuk dari sisi berlawanan dengan sedikit
+       rotasi. Tidak cukup: kaset balik dengan efek pegas. */
+    geser() {
+      const st = this.stage;
+      if (!st) return;
+      const self = this;
+      let d = null;
+
+      st.addEventListener("pointerdown", function (e) {
+        if (e.button != null && e.button > 0) return;
+        if (e.target.closest("button")) return;
+        d = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, live: false };
+        self.batal();
+      });
+
+      st.addEventListener("pointermove", function (e) {
+        if (!d) return;
+        const dx = e.clientX - d.x, dy = e.clientY - d.y;
+        if (!d.live) {
+          if (Math.abs(dx) < 8) return;
+          if (Math.abs(dy) > Math.abs(dx)) { d = null; return; }   /* vertikal = halaman */
+          d.live = true;
+          try { st.setPointerCapture(e.pointerId); } catch (err) {}
+        }
+        d.dx = dx;
+        self.cas.style.transform = self.xf(dx);
+      });
+
+      const akhir = function (e) {
+        if (!d) return;
+        const s = d;
+        d = null;
+        try { st.releasePointerCapture(e.pointerId); } catch (err) {}
+        if (!s.live) return;
+        const dt = Math.max(1, performance.now() - s.t);
+        const laju = Math.abs(s.dx) / dt;
+        const lewat = Math.abs(s.dx) > SWIPE_MIN || (laju > SWIPE_V && Math.abs(s.dx) > 14);
+        self.selesai(s.dx < 0 ? 1 : -1, lewat, s.dx);
+      };
+      st.addEventListener("pointerup", akhir);
+      st.addEventListener("pointercancel", akhir);
+    },
+
+    xf(x) {
+      return "translate3d(" + x.toFixed(1) + "px,0,0) rotate(" +
+             clamp(x * 0.045, -7, 7).toFixed(2) + "deg)";
+    },
+
+    selesai(dir, lewat, dari) {
+      const self = this;
+      const w = (this.stage && this.stage.clientWidth) || 240;
+
+      if (!lewat) {                       /* tidak cukup jauh: pegas balik */
+        this.tween(0.55, easeBack, function (k) { self.cas.style.transform = self.xf(dari * (1 - k)); });
+        return;
+      }
+      const keluar = dari + dir * w * 1.15;
+      this.tween(0.24, easeIn, function (k) {
+        self.cas.style.transform = self.xf(dari + (keluar - dari) * k);
+      }, function () {
+        self.ke(self.i + dir);
+        const masuk = -dir * w * 0.9;
+        self.cas.style.transform = self.xf(masuk);
+        self.tween(0.5, easeOut, function (k) { self.cas.style.transform = self.xf(masuk * (1 - k)); });
+      });
+    },
+
+    tween(detik, ease, step, selesai) {
+      const self = this;
+      const my = ++this.seq;
+      cancelAnimationFrame(this.raf);
+      if (reduced() || detik <= 0) { step(1); if (selesai) selesai(); return; }
+      const t0 = performance.now();
+      const tick = function (t) {
+        if (my !== self.seq) return;             /* ada gestur baru: batalkan */
+        const k = clamp((t - t0) / (detik * 1000), 0, 1);
+        step(ease(k));
+        if (k < 1) self.raf = requestAnimationFrame(tick);
+        else { self.raf = 0; if (selesai) selesai(); }
+      };
+      this.raf = requestAnimationFrame(tick);
+    },
+    batal() { cancelAnimationFrame(this.raf); this.raf = 0; this.seq++; },
+
+    /* ---------------------------------------------------- 8. Media Session */
+    media() {
+      const self = this;
+      const ms = navigator.mediaSession;
+      if (!ms) return;
+      const pasang = function (nama, fn) {
+        try { ms.setActionHandler(nama, fn); } catch (e) { /* tidak didukung */ }
+      };
+      pasang("play", function () { if (!self.playing) self.main(); });
+      pasang("pause", function () { self.jeda(); });
+      pasang("previoustrack", function () { self.ke(self.i - 1); });
+      pasang("nexttrack", function () { self.ke(self.i + 1); });
+    },
+
+    /* ------------------------------------------------------------ 9. simpan */
+    simpan() {
+      try { sessionStorage.setItem(TAPE_SIMPAN, String(this.i)); } catch (e) {}
+    },
+    baca() {
+      let n = 0;
+      try { n = parseInt(sessionStorage.getItem(TAPE_SIMPAN) || "0", 10) || 0; } catch (e) { n = 0; }
+      this.i = clamp(n, 0, TRACKS.length - 1);
+    },
+
+    /* File hilang / tidak bisa dibaca: Hanya tampil pesan. Tidak boleh
+       membuat halaman error, dan tidak boleh autoplay setelahnya. */
+    gagal() {
+      this.dead = true;
+      this.playing = false;
+      this.loading = false;
+      if (this.mode === "wa") this.stopBuf(0.05);
+      cancelAnimationFrame(this.vraf);
+      if (this.au) { try { this.au.pause(); } catch (e) {} }
+      this.mode = "";
+      this.paintPlay();
+      if (this.playBtn) this.playBtn.disabled = true;
+      this.say("musik tidak tersedia", false);
+      this.sr("Musik tidak tersedia.");
+    }
+  };
+
   /* ------------------------------------------------- 10. section baru + init */
 
   function newSections() {
@@ -4009,6 +4605,7 @@
     maddingUI();
     fallingLeaves();
     inkMarks();
+    Tape.build();
     Wipe.panels = $$(".wipe__panel");
   }
 

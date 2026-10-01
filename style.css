@@ -478,10 +478,12 @@ section { position: relative; }
 .deck {
   position: relative;
   width: min(86vw, 44rem, 94svh);
-  aspect-ratio: 3 / 2;
   margin: 0;
   padding: 0;
   list-style: none;
+  /* kartu ditumpuk di SATU sel grid yang sama, jadi tinggi .deck otomatis
+     mengikuti tinggi kartu tertinggi (foto + footer), bukan dipatok rasio. */
+  display: grid;
   perspective: 1200px;
   /* drag horizontal milik JS, scroll vertikal tetap milik browser */
   touch-action: pan-y;
@@ -489,12 +491,14 @@ section { position: relative; }
   user-select: none;
 }
 .deck__card {
-  position: absolute;
-  inset: 0;
+  grid-area: 1 / 1;
+  position: relative;
   z-index: 1;
   margin: 0;
-  padding: clamp(0.7rem, 1.6vw, 1rem) clamp(0.7rem, 1.6vw, 1rem) clamp(2.6rem, 5vw, 3.4rem);
+  padding: clamp(0.7rem, 1.6vw, 1rem);
   background: #FBF6EA;
+  display: flex;
+  flex-direction: column;
   transform-origin: 50% 100%;
   will-change: transform, opacity;
   backface-visibility: hidden;
@@ -522,23 +526,87 @@ section { position: relative; }
 @media (hover: hover) and (pointer: fine) {
   .deck__card[data-depth="0"] { cursor: pointer; }
 }
-.deck__card img { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--paper-deep); pointer-events: none; }
-.deck__card figcaption {
-  position: absolute;
-  left: clamp(0.7rem, 1.6vw, 1rem);
-  right: clamp(0.7rem, 1.6vw, 1rem);
-  bottom: clamp(0.85rem, 2vw, 1.3rem);
+.deck__card figure {
+  /* [area foto] lalu [footer], dua-duanya di alur normal. min-height:0 +
+     flex:1 membuat foto mengisi sisa ruang dan tidak pernah tertimpa teks. */
+  margin: 0;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-direction: column;
+}
+.deck__card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  object-fit: cover;
+  background: var(--paper-deep);
+  pointer-events: none;
+}
+.deck__card figcaption {
+  /* Footer putih/cream DI BAWAH foto, di alur normal (bukan absolute).
+     Tinggi mengikuti isi; min-height = 2 baris caption supaya tinggi kartu
+     tetap konsisten saat berpindah foto. */
+  flex: 0 0 auto;
+  min-height: 2.8em;
+  margin-top: clamp(0.5rem, 1.3vw, 0.8rem);
+  padding: 0.1rem 0 clamp(0.15rem, 0.7vw, 0.3rem);
+  /* caption + tanggal jadi dua kolom fleksibel, bukan dua teks yang berebut
+     ruang. Kolom caption minmax(0,1fr) + min-width:0 = caption panjang bisa
+     turun 2 baris tanpa pernah mendorong tanggal keluar kartu. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  align-content: end;
+  column-gap: clamp(0.5rem, 2vw, 1rem);
+  row-gap: 0.2rem;
   font-family: var(--mono);
-  font-size: 0.62rem;
+  font-size: clamp(0.55rem, 0.49rem + 0.3vw, 0.62rem);
+  line-height: 1.4;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-soft);
   pointer-events: none;
 }
-.deck__card figcaption b { font-weight: 500; color: var(--ink); }
+/* caption maksimal 2 baris + ellipsis; teks penuh ada di lightbox.
+   min-height = 2 baris (2 x line-height 1.4) supaya tinggi kartu tidak
+   melompat-lompat saat kartu berganti. */
+.deck__card figcaption b,
+.deck__card figcaption > span {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.deck__card figcaption b {
+  font-weight: 500;
+  color: var(--ink);
+  min-height: 2.8em;
+}
+.deck__card figcaption > span {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  white-space: nowrap;
+  justify-self: end;
+}
+/* layar sempit: dua baris penuh — caption di atas, tanggal di bawahnya */
+@media (max-width: 480px) {
+  .deck__card figcaption {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deck__card figcaption > span {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    justify-self: start;
+  }
+}
 .stack__hint {
   position: absolute;
   bottom: clamp(1.6rem, 5vh, 3rem);
@@ -770,6 +838,9 @@ section { position: relative; }
   background: var(--paper-deep);
 }
 .cloth__cap {
+  /* tinggi tetap 14px: tinggi frame dihitung script.js dari angka ini
+     (tinggi panggung = tali + foto + 72). Jadi yang dirapikan adalah isi,
+     bukan tingginya: tanggal dikunci nowrap, caption boleh melebar. */
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -777,20 +848,38 @@ section { position: relative; }
   height: 14px;
   margin-top: 7px;
   font-family: var(--mono);
-  font-size: 0.55rem;
+  font-size: clamp(0.5rem, 0.44rem + 0.2vw, 0.55rem);
+  line-height: 1.2;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-soft);
   white-space: nowrap;
   overflow: hidden;
 }
-.cloth__cap b { font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.cloth__cap b {
+  font-weight: 500;
+  color: var(--ink);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloth__cap > span { flex: 0 0 auto; }      /* tanggal tidak pernah ikut terpotong */
 .cloth__note {
+  /* 25px = 2 baris (2 x 0.66rem x 1.32). Dikunci 2 baris + ellipsis supaya
+     tidak ada teks yang keluar kartu; teks penuh ada di lightbox. */
   height: 25px;
   margin-top: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
   font-family: var(--serif);
-  font-size: 0.66rem;
+  font-size: clamp(0.6rem, 0.54rem + 0.2vw, 0.66rem);
   font-weight: 400;
   line-height: 1.32;
   color: var(--ink);
@@ -1049,14 +1138,48 @@ section { position: relative; }
 .shot__btn:hover::after, .shot__btn:focus-visible::after { opacity: 0.07; }
 .shot__frame { position: relative; transform-origin: 50% 50%; will-change: transform; }
 .shot img { width: 100%; height: auto; background: var(--paper-deep); }
-.shot figcaption { display: flex; justify-content: space-between; gap: 0.9rem; margin-top: 0.7rem; font-family: var(--mono); font-size: 0.63rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
-.shot figcaption b { font-weight: 500; color: var(--ink); }
+.shot figcaption {
+  /* baris kecil: nomor+tanggal di kiri, kategori di kanan. Kalau kategori
+     panjang, baris ini turun sendiri (flex-wrap) — tidak pernah menimpa. */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.15rem 0.9rem;
+  margin-top: 0.7rem;
+  font-family: var(--mono);
+  font-size: clamp(0.58rem, 0.53rem + 0.2vw, 0.63rem);
+  line-height: 1.35;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.shot figcaption b { font-weight: 500; color: var(--ink); white-space: nowrap; }
+.shot figcaption > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  text-align: right;
+}
 .shot__text {
   margin: 0.45rem 0 0;
-  font-size: 0.92rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  font-size: clamp(0.84rem, 0.79rem + 0.25vw, 0.92rem);
   line-height: 1.45;
   color: var(--ink);
-  max-width: 30ch;
+  max-width: 34ch;
 }
 @media (hover: hover) and (pointer: fine) {
   .shot__text {
@@ -1081,7 +1204,7 @@ section { position: relative; }
 @media (max-width: 560px) {
   .wall__grid { columns: 1; }
   .hero__facts { gap: 1.1rem; }
-  .deck { width: min(88vw, 24rem, 64svh); aspect-ratio: 3 / 2; }
+  .deck { width: min(88vw, 24rem, 64svh); }
 }
 
 /* =============================================================================
@@ -1326,14 +1449,21 @@ section { position: relative; }
   /* Caption dikunci dua baris. Tanpa ini tinggi tiap kartu berbeda
      tergantung panjang caption, jadi baris foto berikutnya bisa menimpa
      baris di atasnya dan jarak antar titik tidak bisa dihitung dari satu
-     angka. */
+     angka. min-height memaksa SELALU dua baris (kartu 1 baris pun ikut
+     setinggi kartu 2 baris), sehingga tinggi lajur yang dihitung script.js
+     selalu benar. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
   padding: 0.32rem 0.1rem 0.42rem;
+  min-height: 2.8em;
   font-family: var(--mono);
-  font-size: 0.52rem;
+  font-size: clamp(0.48rem, 0.44rem + 0.16vw, 0.52rem);
+  line-height: 1.4;
   letter-spacing: 0.08em;
   color: var(--ink-soft);
   text-align: center;
@@ -2189,13 +2319,20 @@ section { position: relative; }
   bottom: clamp(1rem, 4vh, 2.6rem);
   transform: translateX(-50%);
   width: min(46rem, calc(100vw - 2 * var(--gut)));
+  /* caption di bawah boleh panjang (teks penuhnya ada di sini), tapi tidak
+     boleh naik sampai menimpa foto: batasi tinggi, sisanya bisa digulir.
+     Ruang untuk caption dihitung script.js dari tinggi sebenarnya (lbBox). */
+  max-height: min(42svh, 22rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   color: var(--on-ink);
   text-align: center;
   opacity: 0;
   pointer-events: auto;
 }
-.lb__cap-text { margin: 0 0 0.5rem; font-family: var(--serif); font-weight: 450; font-size: clamp(1rem, 0.9rem + 0.6vw, 1.35rem); line-height: 1.3; text-wrap: balance; }
-.lb__cap-meta { margin: 0; font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--sage); display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; }
+.lb__cap-text { margin: 0 0 0.5rem; font-family: var(--serif); font-weight: 450; font-size: clamp(1rem, 0.9rem + 0.6vw, 1.35rem); line-height: 1.3; text-wrap: balance; overflow-wrap: anywhere; }
+.lb__cap-meta { margin: 0; font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--sage); display: flex; gap: 0.4em 1em; justify-content: center; flex-wrap: wrap; overflow-wrap: anywhere; }
+.lb__cap-meta span { max-width: 100%; }
 .lb__btn {
   position: fixed;
   z-index: 2;
@@ -2223,15 +2360,332 @@ section { position: relative; }
 .lb.is-drag .lb__img { cursor: grabbing; }
 
 /* =============================================================================
+   6. PEMUTAR MUSIK — satu kaset analog di pojok kanan bawah
+
+   Letak: duduk DI ATAS tombol "ke atas" (yang hanya muncul <= 768px), jadi
+   --tape-bottom = 14px + 42px + 10px. Di layar lebar tombol ke atas tidak ada,
+   jadi widget turun ke pojok biasa.
+
+   z-index 42: di atas tombol ke atas (41) dan peta lompat (40), di bawah rail
+   dan HUD (80) supaya tidak pernah menutupi angka "01 / 171" di kiri bawah.
+   Lightbox (120), toast (125), dan modal madding (130) selalu di atasnya; kalau
+   salah satunya terbuka, widget disembunyikan total (aturan :has di bawah).
+
+   Semua gambar dibuat dari div + border-radius: tanpa file aset baru.
+   Roda gulungan berputar lewat animasi CSS, bukan JS, sehingga CPU tetap
+   ringan: `animation-play-state` cuma berubah saat putar/dijeda.
+   ============================================================================= */
+.tape {
+  --tape-bottom: 66px;
+  --tape-w: 15.5rem;
+  position: fixed;
+  right: 12px;
+  bottom: var(--tape-bottom);
+  z-index: 42;
+  width: 44px;
+  height: 44px;
+  transition: opacity 0.25s var(--ease);
+}
+@media (min-width: 769px) { .tape { --tape-bottom: clamp(1rem, 2.6vw, 1.9rem); } }
+
+/* sembunyi saat ada overlay: lightbox, modal madding, atau tirai intro */
+body:has(.lb.is-open) .tape,
+body:has(.pad.is-open) .tape,
+body:has(.curtain) .tape { opacity: 0; pointer-events: none; }
+
+/* ---------------------------------------------------------------- tombol kaset */
+.tape__fab {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink) 26%, transparent);
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: var(--ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 2px 0 rgba(31, 61, 43, 0.14), 0 14px 22px -16px rgba(12, 24, 17, 0.6);
+  transition: background-color 0.35s var(--ease), color 0.35s var(--ease), transform 0.35s var(--ease);
+}
+.tape__fab svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+.tape__fab:active { transform: scale(0.94); }
+@media (hover: hover) and (pointer: fine) {
+  .tape__fab:hover { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+}
+/* denyut pelan di sekeliling tombol selama musik hidup */
+.tape__fab::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink) 34%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+.tape.is-playing .tape__fab::after { animation: tapePing 2.8s var(--ease) infinite; }
+@keyframes tapePing {
+  0%   { opacity: 0.55; transform: scale(0.9); }
+  70%  { opacity: 0;    transform: scale(1.18); }
+  100% { opacity: 0;    transform: scale(1.18); }
+}
+
+/* -------------------------------------------------------------------- panel */
+.tape__panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.55rem);
+  z-index: 1;
+  width: min(var(--tape-w), calc(100vw - 1.6rem));
+  padding: 0.8rem 0.8rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--paper) 95%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
+  box-shadow: 0 2px 0 rgba(31, 61, 43, 0.12), 0 30px 52px -28px rgba(12, 24, 17, 0.66);
+  text-align: center;
+  transform-origin: 100% 100%;
+  transform: translateY(10px) scale(0.95);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.28s var(--ease), transform 0.32s var(--ease), visibility 0s linear 0.32s;
+}
+.tape[data-open="true"] .tape__panel {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity 0.28s var(--ease), transform 0.32s var(--ease), visibility 0s linear 0s;
+}
+
+/* area geser: drag horizontal milik JS (Pointer Events), scroll vertikal
+   tetap milik halaman */
+.tape__stage {
+  display: grid;
+  place-items: center;
+  padding: 0.1rem 0 0.3rem;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: grab;
+}
+.tape__stage:active { cursor: grabbing; }
+
+/* ------------------------------------------------------------------- kaset */
+.tape__cas {
+  position: relative;
+  width: 100%;
+  max-width: 12.4rem;
+  aspect-ratio: 1.52 / 1;
+  border-radius: 7px;
+  background: linear-gradient(168deg, #FBF6EA 0%, #F0E7D2 58%, #E6DCC4 100%);
+  box-shadow: inset 0 0 0 1px rgba(31, 61, 43, 0.14), 0 3px 6px rgba(31, 61, 43, 0.12),
+              0 18px 26px -18px rgba(12, 24, 17, 0.62);
+  transform-origin: 50% 62%;
+  will-change: transform;
+}
+.tape__screw {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #CBBE9E, #9A8B69);
+  box-shadow: inset 0 0 0 0.5px rgba(31, 61, 43, 0.35);
+}
+.tape__screw--b { top: auto; bottom: 5px; }
+/* label hijau tua + tulisan tangan (font yang sama dipakai madding) */
+.tape__label {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 13%;
+  display: grid;
+  gap: 0.05rem;
+  padding: 0.28rem 0.45rem 0.34rem;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #27492F, #1A3524);
+  box-shadow: 0 1px 2px rgba(12, 24, 17, 0.4);
+  color: var(--on-ink);
+  font-family: var(--hand);
+  line-height: 1.02;
+}
+.tape__lt {
+  font-family: var(--hand);
+  font-size: clamp(0.92rem, 0.78rem + 0.7vw, 1.18rem);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tape__la {
+  font-family: var(--hand);
+  font-size: clamp(0.68rem, 0.58rem + 0.5vw, 0.86rem);
+  font-style: normal;
+  color: var(--sage-pale);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* jendela gelap: dua roda gulungan */
+.tape__win {
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  bottom: 7%;
+  height: 33%;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 6%;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #2A4A34, #16301E);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4), inset 0 2px 5px rgba(0, 0, 0, 0.45);
+}
+.tape__reel {
+  position: relative;
+  width: 30%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background-color: #DCCFAE;
+  background-image: repeating-conic-gradient(from 0deg, #EFE7D4 0deg 13deg, #1A3524 13deg 60deg);
+  box-shadow: 0 0 0 2px rgba(239, 231, 212, 0.18), 0 0 0 3px rgba(0, 0, 0, 0.4);
+  animation: tapeSpin 2.1s linear infinite;
+  animation-play-state: paused;
+  will-change: transform;
+}
+.tape__reel::after {          /* poros roda */
+  content: "";
+  position: absolute;
+  inset: 36%;
+  border-radius: 50%;
+  background: #F3EBD8;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.tape.is-playing .tape__reel { animation-play-state: running; }
+@keyframes tapeSpin { to { transform: rotate(360deg); } }
+
+/* ------------------------------------------------------------------ kendali */
+.tape__ctl { display: flex; align-items: center; justify-content: center; gap: 0.7rem; margin-top: 0.75rem; }
+.tape__arrow {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 26%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--paper) 55%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.3s var(--ease), color 0.3s var(--ease), transform 0.3s var(--ease);
+}
+.tape__arrow svg { width: 0.85rem; height: 0.85rem; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.tape__arrow:active { transform: scale(0.92); }
+@media (hover: hover) and (pointer: fine) {
+  .tape__arrow:hover { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+}
+.tape__play {
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--on-ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 2px 0 rgba(12, 24, 17, 0.3), 0 12px 18px -12px rgba(12, 24, 17, 0.7);
+  transition: transform 0.3s var(--ease), background-color 0.3s var(--ease);
+}
+.tape__play svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.tape__play:active { transform: scale(0.93); }
+.tape__i-pause { display: none; }
+.tape__i-play { fill: currentColor; stroke: none; }
+.tape.is-playing .tape__i-play { display: none; }
+.tape.is-playing .tape__i-pause { display: block; }
+.tape.is-loading .tape__play { opacity: 0.6; cursor: progress; }
+@media (hover: hover) and (pointer: fine) { .tape__play:hover { background: #2A4A34; } }
+
+.tape__name {
+  margin: 0.6rem 0 0;
+  min-height: 1.2em;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.tape__side { margin: 0.2rem 0 0; font-family: var(--hand); font-size: 1.1rem; font-weight: 600; color: var(--ink); }
+.tape__side[hidden] { display: none; }
+.tape__dots { display: flex; justify-content: center; gap: 0.4rem; margin: 0.55rem 0 0; }
+.tape__dots[hidden] { display: none; }
+.tape__dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  transition: background-color 0.3s var(--ease), transform 0.3s var(--ease);
+}
+.tape__dots i.is-on { background: var(--ink); transform: scale(1.25); }
+.tape__hint {
+  margin: 0.55rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.85;
+}
+.tape__hint[hidden] { display: none; }
+.tape__status {
+  margin: 0.45rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--clay);
+  overflow-wrap: anywhere;
+}
+.tape__status:empty { display: none; }
+/* khusus screen reader: status putar/jeda, tidak pernah tampil */
+.tape__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* =============================================================================
    Aksesibilitas: kurangi gerakan
-============================================================================= */
+   ============================================================================= */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+  /* roda kaset berhenti total (bukan berputar sangat cepat) */
+  .tape__reel, .tape__fab::after { animation: none !important; }
   .grain { display: none; }
+
   .mark path { stroke-dashoffset: 0; }
   /* jangan sampai catatan tersembunyi kalau IntersectionObserver tidak jalan */
   .note { opacity: 1; transform: rotate(var(--rot, 0deg)); }
