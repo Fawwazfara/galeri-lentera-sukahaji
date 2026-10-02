@@ -3,7 +3,8 @@
    Semua foto dirender dari array PHOTOS di data/photos.js.
    Urutan: 0) util  1) render  2) smooth scroll  3) intro tirai  4) hero
              5) tumpukan kartu  5b) jemuran (tali + bandul)  5b2) rol film (HP)
-             5c) madding  6) masonry  6c) peta lompat  7) tilt + kursor
+             5c) jejak  5d) kenalan (Lentera Kenangan)  5e) cetakan
+             5f) madding  6) masonry  6c) peta lompat  7) tilt + kursor
              8) lightbox  9) rail, counter, transisi latar  10) init
 
    Animasi berat otomatis dimatikan bila prefers-reduced-motion aktif.
@@ -38,7 +39,8 @@
 
   const TRACKS = [
     { title: "Kisah Klasik", artist: "Sheila On 7", file: "music/kisah-klasik.mp3?v=3" },
-    { title: "Pamit",        artist: "Tulus",        file: "music/pamit.mp3?v=3" }
+    { title: "Pamit",        artist: "Tulus",        file: "music/pamit.mp3?v=3" },
+    { title: "Ruang Baru",   artist: "Barsena Bestandhi", file: "music/ruang-baru.mp3?v=3" }
   ];
 
   /* Volume default. 0..1 — ini level musik setelah fade-in, bukan volume
@@ -59,9 +61,10 @@
   /* --------------------------------------------------------------- jatah
      Satu foto hanya boleh dippingin SATU section. Penentuannya field
      `bagian` di data/photos.js:
-       tumpukan : kartu hero + deck      jemuran : tali jemuran
-       film     : rol kamera (HP)       jejak    : jalur peta / titik singgah
-     Foto tanpa `bagian` otomatis masuk jejak. Daftar ini hanya fallback:
+tumpukan : kartu hero + deck      jemuran : tali jemuran
+        film     : rol kamera (HP)       jejak    : jalur peta / titik singgah
+        cetakan  : dinding hasil cetak  (lihat Prints)
+      Foto tanpa `bagian` otomatis masuk jejak. Daftar ini hanya fallback:
      kalau data/photos.js diisi lengkap, pembagian di situ yang berlaku. */
   const ofPart = (name) => {
     const m = [];
@@ -108,6 +111,16 @@
       h = Math.imul(h, 16777619);
     }
     return (h >>> 0) / 4294967295;
+  }
+
+  /* Angka 0..1 yang stabril per nomor urut, tersebar merata. Untuk sudut
+     miring/lakban di dinding Cetakan: hash32() terlalu rapat kalau input-nya
+     cuma indeks berurutan (itu yang bikin semua sudut nyaris sama), sedangkan
+     sebar() memakai rasio emas jadi tiap cetakan dapat sudut berbeda dan
+     tetap sama tiap refresh. */
+  function sebar(k, salt) {
+    const x = (k + 1) * 0.6180339887498949 + salt;
+    return x - Math.floor(x);
   }
 
   const totalEl = $(".hud__all");
@@ -1865,6 +1878,1160 @@
   };
 
 
+  /* ------------------------------------------------- 4d. KENALAN — "Lentera Kenangan"
+
+     Gacha lentera kertas untuk kenalan dengan anggota. Visualnya digambar
+     sendiri di style.css (siluet bukit dan sawah, lentera SVG) serta di sini
+     (canvas kunang-kunang, partikel ledakan). Tidak ada aset, karakter, logo,
+     atau UI game mana pun yang dipakai; yang dipinjam hanya struktur umumnya
+     saja: urutan penarikan, ledakan cahaya, reveal, dan layar hasil.
+ */
+
+  const KDIR = "assets/anggota/";
+
+  /* Batas partikel: ledakan tarikan dan kunang-kunang, maksimal 40 masing-masing. */
+  const KMAX_PARTIKEL = 40;
+  const KMAX_LANGIT   = 40;
+
+  /* ------------------------------------------------------------ AREA UBAH
+     WARNA AURA ....... array AURA di bawah. Tambah warna = tambah satu
+                        objek { nama, inti, mid, rindu }. "inti" warna terang di
+                        pusat, "mid" warna transparan untuk ekor dan kilatan,
+                        "rindu" HARUS alpha 0 supaya gradiennya mulus.
+     JUMLAH PARTIKEL .. KMAX_PARTIKEL untuk ledakan tarikan (dibagi dua antara
+                        serpihan kertas dan percikan), KMAX_LANGIT untuk
+                        kunang-kunang.
+     DURASI ANIMASI ... LENTERA.DURASI (detik) dan LENTERA.KEDIP (detik,
+                        makin kecil = apinya makin cepat berkedip). */
+
+  const LENTERA = {
+    AURA: [
+      { nama: "emas hangat",  inti: "#FFF0C4", mid: "rgba(244, 201, 116, 0.34)", rindu: "rgba(244, 201, 116, 0)" },
+      { nama: "hijau lembut",  inti: "#DFF3DA", mid: "rgba(160, 214, 168, 0.32)", rindu: "rgba(160, 214, 168, 0)" },
+      { nama: "krem putih",   inti: "#FFFDF4", mid: "rgba(255, 247, 226, 0.32)", rindu: "rgba(255, 247, 226, 0)" },
+      { nama: "rose lembut",  inti: "#FFE2DA", mid: "rgba(241, 190, 178, 0.32)", rindu: "rgba(241, 190, 178, 0)" }
+    ],
+    /* 1,2 + 1,0 + 0,4 + 1,4 = 4,0 detik, urutan sama dengan style.css */
+    DURASI: {locale: 1.2, naik: 1.0, ledakan: 0.4, reveal: 1.4, singkat: 0.55},
+    KEDIP: {dasar: 2.6, cepat: 0.3}
+  };
+
+  /* ===================================================================
+     Kunang-kunang. Canvas, maksimal 40 titik, hidup hanya saat section
+     terlihat (IntersectionObserver) dan tab-nya sedang aktif.
+     =================================================================== */
+  const Langit = {
+    cv: null, ctx: null, w: 0, h: 0, dpr: 1, raf: 0, tik: [], terakhir: 0,
+    io: null, taruh: null, lihat: true,
+
+    mulai(cv, section) {
+      const self = this;
+      this.cv = cv;
+      if (!cv || !cv.getContext) return;
+      this.ctx = cv.getContext("2d");
+      if (!this.ctx) return;
+      this.ukur();
+
+      this.lihat = true;
+      if ("IntersectionObserver" in window) {
+        this.io = new IntersectionObserver(function (es) {
+          es.forEach(function (e) {
+            self.lihat = e.isIntersecting;
+            if (e.isIntersecting) self.jalan();
+            else self.jenti();
+          });
+        }, { threshold: 0.04 });
+        this.io.observe(section);
+      } else {
+        this.jalan();
+      }
+      window.addEventListener("resize", function () { self.ukur(); });
+      document.addEventListener("visibilitychange", function () {
+        /* tab aktif lagi hanya menyalakan loop kalau section-nya memang terlihat */
+        if (document.hidden) self.jenti();
+        else if (self.lihat) self.jalan();
+      });
+    },
+
+    /* canvas selalu mengikuti ukuran CSS-nya, tidak melebihi ukuran layar */
+    ukur() {
+      const r = this.cv.getBoundingClientRect();
+      this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      this.w = Math.max(1, Math.round(r.width));
+      this.h = Math.max(1, Math.round(r.height));
+      this.cv.width = Math.round(this.w * this.dpr);
+      this.cv.height = Math.round(this.h * this.dpr);
+      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      /* jumlah titik menyesuaikan lebar layar, tetap di bawah batas 40 */
+      const mau = Math.min(KMAX_LANGIT, Math.max(6, Math.round(this.w / 46)));
+      while (this.tik.length < mau) this.tik.push(this.titik());
+      if (this.tik.length > mau) this.tik.length = mau;
+    },
+    titik() {
+      return {
+        x: Math.random() * this.w,
+        y: Math.random() * this.h * 0.86,
+        vx: (Math.random() - 0.5) * 7,
+        vy: (Math.random() - 0.5) * 5 - 2,
+        r: 0.9 + Math.random() * 1.9,
+        a: 0.25 + Math.random() * 0.55,
+        ph: Math.random() * 6.28,
+        ke: 5 + Math.random() * 9
+      };
+    },
+    jalan() {
+      if (this.raf || !this.ctx || document.hidden) return;
+      this.terakhir = 0;
+      const self = this;
+      const tick = function (t) {
+        self.raf = requestAnimationFrame(tick);
+        if (!self.terakhir) self.terakhir = t;
+        const dt = Math.min(0.05, (t - self.terakhir) / 1000);
+        self.terakhir = t;
+        self.gambar(dt, t / 1000);
+      };
+      this.raf = requestAnimationFrame(tick);
+    },
+    jenti() {
+      if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
+      if (this.ctx) this.ctx.clearRect(0, 0, this.w, this.h);
+    },
+
+    /* taruh = { x, y } sementara: kunang-kunang tertarik ke lentera selama
+       antisinya. Dikosongkan supaya kunang-kunang kembali berkeliaran. */
+    tarik(taruh) { this.taruh = taruh; },
+
+    /* Koordinat dari getBoundingClientRect itu koordinat layar, sedangkan
+       titik kunang-kunang memakai koordinat lokal canvas. Dikonversi dulu. */
+    keLokal(x, y) {
+      const r = this.cv.getBoundingClientRect();
+      return { x: x - r.left, y: y - r.top };
+    },
+
+    gambar(dt, waktu) {
+      const c = this.ctx, tik = this.tik;
+      c.clearRect(0, 0, this.w, this.h);
+      for (let i = 0; i < tik.length; i++) {
+        const p = tik[i];
+        if (this.taruh) {
+          p.vx += (this.taruh.x - p.x) * 0.0016 * dt * 60;
+          p.vy += (this.taruh.y - p.y) * 0.0016 * dt * 60;
+        } else {
+          p.vx += Math.sin(waktu * 0.7 + p.ph) * 0.05;
+          p.vy -= 0.012;
+        }
+        p.vx *= 0.985; p.vy *= 0.985;
+        p.x += p.vx * dt * p.ke;
+        p.y += p.vy * dt * p.ke;
+        if (p.x < -20) p.x = this.w + 20;
+        if (p.x > this.w + 20) p.x = -20;
+        if (p.y < -20) p.y = this.h + 20;
+        if (p.y > this.h + 20) p.y = -20;
+
+        const denyut = 0.62 + 0.38 * Math.sin(waktu * 2.1 + p.ph);
+        const r = p.r * (0.85 + denyut * 0.35);
+        const a = (p.a * denyut).toFixed(3);
+        /* glow lewat radial-gradient di canvas, tanpa filter CSS */
+        const g = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 6);
+        g.addColorStop(0, "rgba(255, 226, 150, " + a + ")");
+        g.addColorStop(1, "rgba(255, 226, 150, 0)");
+        c.fillStyle = g;
+        c.beginPath(); c.arc(p.x, p.y, r * 6, 0, 6.2832); c.fill();
+        c.fillStyle = "rgba(255, 240, 200, " + a + ")";
+        c.beginPath(); c.arc(p.x, p.y, r, 0, 6.2832); c.fill();
+      }
+    }
+  };
+
+  /* ===================================================================
+     Modul Lentera
+     =================================================================== */
+  const Lentera = {
+    sec: null, sky: null, cv: null, glow: null, hills: null,
+    lantern: null, halo: null, body: null, flame: null,
+    left: null, one: null, ten: null, done: null, reshuffle: null,
+    history: null, thumbs: null, live: null,
+    ov: null, scrim: null, box: null, skip: null,
+    cast: null, fl: null, trail: null, ring: null, shout: null,
+    card: null, art: null, badge: null, ghost: null, img: null, marks: null,
+    call: null, name: null, stamp: null, note: null, from: null,
+    acts: null, next: null, grid: null, gridT: null, gridList: null,
+    again: null, close: null,
+    zoom: null, zoomScrim: null, zoomBox: null, zoomImg: null, zoomCap: null,
+    zoomClose: null, zoomIdx: null,
+
+    list: [], antre: [], keluar: [], batch: [], namaHuruf: [],
+    daftarZoom: [], bonusMuncul: false,
+    busy: false, phase: "kosong", batchN: 0, batchIdx: 0, perluBonus: false,
+    cur: null, tl: null, onLanjut: null, lanjutFn: null, lastFocus: null,
+    _px: null, _py: null, _gerak: null,
+
+    /* ------------------------------------------------------- kerangka */
+    build() {
+      const self = this;
+      const raw = Array.isArray(window.ANGGOTA) ? window.ANGGOTA : [];
+
+      this.sec = $("#kenalan");
+      if (!this.sec || this.sec.dataset.built) return;
+      if (!raw.length) { this.sec.hidden = true; return; }
+      this.sec.dataset.built = "1";
+
+      this.sky = $(".lent__sky", this.sec);
+      this.cv = $("#lentFlies");
+      this.glow = $("#lentGlow");
+      this.lantern = $("#lentLantern");
+      this.halo = $("#lentHalo");
+      this.hills = $$(".lent__hill", this.sec);
+      this.left = $("#lentLeft");
+      this.one = $("#lentOne");
+      this.ten = $("#lentTen");
+      this.done = $("#lentDone");
+      this.reshuffle = $("#lentReshuffle");
+      this.history = $("#lentHistory");
+      this.thumbs = $("#lentThumbs");
+      this.live = $("#lentLive");
+      this.body = $(".lent__body", this.sec);
+      this.flame = $(".lent__flame", this.sec);
+
+      this.ov = $("#lentOverlay");
+      this.scrim = $("#lentScrim");
+      this.box = $("#lentBox");
+      this.skip = $("#lentSkip");
+      this.cast = $("#lentPull");
+      this.fl = $("#lentPullFl");
+      this.trail = $("#lentPullTrail");
+      this.ring = $("#lentPullRing");
+      this.shout = $("#lentPullShout");
+      this.card = $("#lentCard");
+      this.art = $("#lentArt");
+      this.badge = $("#lentBadge");
+      this.ghost = $("#lentGhost");
+      this.img = $("#lentImg");
+      /* overlay berada di luar <section>, jadi lima lentera kecil dicari
+         di dalam kartu, bukan di dalam section */
+      this.marks = $$(".lcard__mark", this.card);
+      this.call = $("#lentCall");
+      this.name = $("#lentName");
+      this.stamp = $("#lentPeran");
+      this.note = $("#lentNote");
+      this.from = $("#lentFrom");
+      this.acts = $("#lentActs");
+      this.next = $("#lentNext");
+      this.grid = $("#lentGrid");
+      this.gridT = $("#lentGridT");
+      this.gridList = $("#lentGridList");
+      this.again = $("#lentAgain");
+      this.close = $("#lentClose");
+
+      this.zoom      = $("#lentZoom");
+      this.zoomScrim = $("#lentZoomScrim");
+      this.zoomBox   = $(".lzoom__box", this.zoom);
+      this.zoomImg   = $("#lentZoomImg");
+      this.zoomCap   = $("#lentZoomCap");
+      this.zoomClose = $("#lentZoomClose");
+
+      /* entri tanpa nama atau tanpa foto dibuang, sisanya dinormalisasi */
+      this.list = raw.filter(function (a) { return a && a.nama && a.foto; })
+        .map(function (a) {
+          const f = a.fokus || {};
+          return {
+            id: a.foto, nama: String(a.nama), panggilan: a.panggilan || "",
+            peran: a.peran || "", asal: a.asal || "", kalimat: a.kalimat || "",
+            foto: KDIR + a.foto,
+            thumb: KDIR + (a.thumb || a.foto.replace(/\.webp$/i, "-sm.webp")),
+            fx: typeof f.x === "number" ? clamp(f.x, 0, 100) : 50,
+            fy: typeof f.y === "number" ? clamp(f.y, 0, 100) : 35
+          };
+        });
+      if (!this.list.length) { this.sec.hidden = true; return; }
+
+      this.acak();
+      this.kabel();
+      Langit.mulai(this.cv, this.sec);
+      this.paralaks();
+    },
+
+    /* Fisher-Yates. Sources of randomness hanya di sini, jadi antrean selalu
+       utuh dari awal sampai habis tanpa ada duplikat. */
+    acak() {
+      const a = this.list.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = a[i]; a[i] = a[j]; a[j] = t;
+      }
+      this.antre = a;
+      this.keluar = [];
+      this.perluBonus = false;
+      this.bonusMuncul = false;
+      this.batch = [];
+      this.gambarRiwayat();
+      this.perbarui();
+    },
+
+    auraAcak() {
+      const A = LENTERA.AURA;
+      return A[Math.floor(Math.random() * A.length)];
+    },
+
+    /* ------------------------------------------------------------ kabel */
+    kabel() {
+      const self = this;
+      this.one.addEventListener("click", function () { self.mulai("satu"); });
+      this.ten.addEventListener("click", function () { self.mulai("sepuluh"); });
+      this.reshuffle.addEventListener("click", function () {
+        self.acak();
+        self.saya("Antrean diacak ulang. Muat ulang halaman juga mengacak ulang.");
+      });
+
+      this.skip.addEventListener("click", function () { self.lewati(); });
+      this.next.addEventListener("click", function () { self.lanjut(); });
+      this.scrim.addEventListener("click", function () { self.lanjut(); });
+      this.box.addEventListener("click", function (e) {
+        /* tap di mana saja melanjutkan; tombol tetap pakai perilaku sendiri */
+        if (e.target && e.target.closest && e.target.closest("button")) return;
+        self.lanjut();
+      });
+      this.zoomClose.addEventListener("click", function () { self.zoomTutup(); });
+      this.zoomScrim.addEventListener("click", function () { self.zoomTutup(); });
+      document.addEventListener("keydown", function (e) {
+        if (!self.zoomTerbuka()) return;
+        if (e.key === "Escape") { e.preventDefault(); self.zoomTutup(); return; }
+        /* panah kiri/kanan untuk pindah antar-foto yang sudah keluar */
+        if (e.key === "ArrowLeft") { e.preventDefault(); self.zoomGeser(-1); return; }
+        if (e.key === "ArrowRight") { e.preventDefault(); self.zoomGeser(1); }
+      });
+
+      this.again.addEventListener("click", function () { self.tarikLagi(); });
+      this.close.addEventListener("click", function () { self.tutupAtauBonus(); });
+
+      document.addEventListener("keydown", function (e) {
+        if (!self.terbuka()) return;
+        const k = e.key;
+        if (k === "Escape") {
+          e.preventDefault();
+          if (self.sedangAnimasi()) self.lewati(); else self.lanjut();
+          return;
+        }
+        if (k === "Tab") { self.jebak(e); return; }
+        if (k === "Enter" || k === " " || k === "Spacebar") {
+          /* tombol sudah punya perilaku bawaan, jangan dobelkan */
+          if (e.target && e.target.tagName === "BUTTON") return;
+          e.preventDefault();
+          if (self.sedangAnimasi()) self.lewati(); else self.lanjut();
+        }
+      });
+    },
+
+    /* ------------------------------------------------- parallax halus
+       Kursor (dan gyroscope di HP kalau tersedia) menggerakkan --px/--py; CSS
+       yang menerjemahkannya jadi translate3D tiap lapis bukit. Tanpa
+       ScrollTrigger dan tanpa GSAP, dimatikan total kalau reduced motion. */
+    paralaks() {
+      const self = this, sec = this.sec;
+      let tx = 0, ty = 0, cx = 0, cy = 0, raf = 0;
+      const tick = function () {
+        cx += (tx - cx) * 0.07;
+        cy += (ty - cy) * 0.07;
+        sec.style.setProperty("--px", cx.toFixed(2));
+        sec.style.setProperty("--py", cy.toFixed(2));
+        if (Math.abs(tx - cx) > 0.04 || Math.abs(ty - cy) > 0.04) raf = requestAnimationFrame(tick);
+        else raf = 0;
+      };
+      if (reduced()) return;
+      window.addEventListener("pointermove", function (e) {
+        tx = (e.clientX / window.innerWidth - 0.5) * 2;
+        ty = (e.clientY / window.innerHeight - 0.5) * 2;
+        if (!raf) raf = requestAnimationFrame(tick);
+      }, {passive: true});
+      if ("DeviceOrientationEvent" in window &&
+          typeof window.DeviceOrientationEvent.requestPermission !== "function") {
+        window.addEventListener("deviceorientation", function (e) {
+          if (e.gamma == null || e.beta == null) return;
+          tx = clamp(e.gamma / 32, -1, 1);
+          ty = clamp((e.beta - 45) / 32, -1, 1);
+          if (!raf) raf = requestAnimationFrame(tick);
+        });
+      }
+    },
+
+    /* parallax halus pada foto kartu, baru aktif setelah reveal selesai */
+    paralaksKartu(nyalakan) {
+      const self = this;
+      if (!this._gerak) {
+        if (reduced() || !hasGSAP || !gsap.quickTo) return;
+        this._px = gsap.quickTo(this.art, "x", {duration: 0.55, ease: "power2.out"});
+        this._py = gsap.quickTo(this.art, "y", {duration: 0.55, ease: "power2.out"});
+        this._gerak = function (e) {
+          const r = self.art.getBoundingClientRect();
+          if (!r.width) return;
+          self._px(((e.clientX - r.left) / r.width - 0.5) * 14);
+          self._py(((e.clientY - r.top) / r.height - 0.5) * 10);
+        };
+        this.box.addEventListener("pointermove", this._gerak);
+      }
+      if (!nyalakan && this._px) {
+        this._px(0);
+        this._py(0);
+      }
+    },
+
+    /* -------------------------------------------------------- penghitung */
+    perbarui() {
+      const total = this.list.length, sisa = this.antre.length;
+      if (this.left) this.left.innerHTML = "Tersisa <b>" + sisa + "</b> / " + total;
+      if (this.one) {
+        this.one.textContent = "Tarik x1";
+        this.one.disabled = this.busy || !sisa;
+      }
+      if (this.ten) {
+        this.ten.textContent = sisa >= 10 ? "Tarik x10" : "Tarik semua (" + sisa + ")";
+        this.ten.disabled = this.busy || !sisa;
+      }
+      if (this.done) this.done.hidden = !!sisa;
+    },
+    saya(t) { if (this.live) this.live.textContent = t || ""; },
+
+    /* =================================================== TARIKAN ========= */
+    /* Hasil undian ditentukan di awal, sebelum animasi: jadi tidak ada duplikat
+       walau animasi dilewati atau tombol ditekan berkali-kali. */
+    mulai(mode) {
+      const self = this;
+      if (this.busy) return;
+      const sisa = this.antre.length;
+      if (!sisa) { this.saya("Semua anggota sudah keluar. Muat ulang untuk mengacak lagi."); return; }
+
+      const banyak = mode === "sepuluh" ? Math.min(10, sisa) : 1;
+      const batch = [];
+      for (let i = 0; i < banyak; i++) batch.push(this.antre.shift());
+      /* preload foto sebelum animasi supaya kartu tidak berkedip */
+      batch.forEach(function (m) { const w = new Image(); w.src = m.foto; });
+
+      const polos = !hasGSAP || reduced();
+      this.batch = batch;
+      this.batchN = banyak;
+      this.batchIdx = 0;
+      this.busy = true;
+      this.cur = batch[0];
+      if (this.next) this.next.textContent = "Lanjut";
+      this.saya(banyak > 1 ? "Mengundi " + banyak + " orang." : "Mengundi satu orang.");
+      this.perbarui();
+
+      /* Lanjut dari kartu pertama ke sisanya, lalu tutup tarikan ini. */
+      this.lanjutFn = function () {
+        self.batchIdx = 1;
+        if (batch.length > 1) self.singkatBerikut();
+        else self.selesaiBatch();
+      };
+
+      /* tanpa sinematik (reduced motion / tanpa GSAP) multi langsung ke layar
+         hasil, supaya tidak perlu mengetuk sepuluh kali */
+      if (polos && banyak > 1) { this.selesaiBatch(); return; }
+
+      const aura = this.auraAcak();
+      this.sinematik(aura, function () {
+        self.kartu(batch[0], "penuh", self.lanjutFn);
+      });
+    },
+
+    /* Sinematik satu tarikan: anticsinya 0-1,2 dtk, cahaya naik 1,2-2,2 dtk,
+       ledakan 2,2-2,6 dtk (urutan sama seperti style.css). */
+    sinematik(aura, selesai) {
+      const self = this;
+      this.phase = "cast";
+      this.buka("cast");
+      this.onLanjut = null;
+
+      if (!hasGSAP || reduced()) { this.racik(); selesai(); return; }
+
+      const D = LENTERA.DURASI;
+      const glow = "radial-gradient(circle, " + aura.inti + " 0%, " + aura.mid + " 38%, " + aura.rindu + " 70%)";
+      this.fl.style.background = glow;
+      this.fl.style.boxShadow = "0 0 90px 26px " + aura.mid;
+      this.trail.style.background = "linear-gradient(180deg, " + aura.rindu +
+        " 0%, " + aura.mid + " 46%, " + aura.inti + " 100%)";
+      this.ring.style.borderColor = aura.inti;
+      this.ring.style.boxShadow = "0 0 40px 8px " + aura.mid;
+      this.glow.style.background = "radial-gradient(circle, " + aura.mid + " 0%, " + aura.rindu + " 68%)";
+      this.kedip(LENTERA.KEDIP.dasar);
+
+      /* kunang-kunang tertarik ke lentera selama antisinya */
+      const r = this.lantern.getBoundingClientRect();
+      Langit.tarik(Langit.keLokal(r.left + r.width / 2, r.top + r.height * 0.5));
+      const lepas = function () { Langit.tarik(null); self.kedip(LENTERA.KEDIP.dasar); };
+      const jedaLepas = setTimeout(lepas, D.locale * 1000);
+
+      this.skipun(true);
+      const tl = gsap.timeline({
+        onComplete: function () {
+          clearTimeout(jedaLepas);
+          lepas();
+          self.tl = null;
+          self.skipun(false);
+          self.racik();
+          selesai();
+        }
+      });
+      this.tl = tl;
+
+      /* 1. ANTISIPASI 0 -> 1,2 dtk: lentera membesar, api makin cepat,
+         kunang-kunang tertarik, layar bergetar 1-2px saja. */
+      tl.to(this.glow, {opacity: 1, scale: 1.2, duration: D.locale, ease: "power1.in"}, 0)
+        .to(this.lantern, {scale: 1.18, duration: D.locale, ease: "power2.in"}, 0)
+        .to(this.body, {scale: 1.12, duration: D.locale, ease: "power2.in"}, 0)
+        .to(this.halo, {scale: 1.32, opacity: 1, duration: D.locale, ease: "power1.in"}, 0)
+        .to(this.flame, {scaleY: 1.55, duration: D.locale * 0.85, ease: "power1.in", transformOrigin: "50% 92%"}, 0)
+        .fromTo(this.shout, {opacity: 0, y: 10}, {opacity: 1, y: 0, duration: 0.22}, 0.04)
+        .call(function () { self.kedip(LENTERA.KEDIP.cepat); }, [], D.locale * 0.6)
+        .to(this.sec, {
+          x: function (i) { return (i % 2 ? -1 : 1) * 1.4; },
+          y: function (i) { return (i % 2 ? 1 : -1) * 1.2; },
+          duration: 0.08, repeat: 7, yoyo: true, ease: "none"
+        }, 0.2)
+
+      /* 2. NAIK 1,2 -> 2,2 dtk: bola cahaya melesat dengan ekor cahaya. */
+        .fromTo(this.fl, {opacity: 0, scale: 0.3}, {opacity: 1, scale: 1, duration: 0.16, ease: "power2.out"}, D.locale)
+        .to(this.fl, {y: "-46vh", scale: 0.45, duration: D.naik, ease: "power2.in"}, D.locale + 0.12)
+        .fromTo(this.trail, {opacity: 0, scaleY: 0.08}, {opacity: 0.9, scaleY: 1, duration: 0.2, ease: "power2.out"}, D.locale + 0.16)
+        .to(this.trail, {scaleY: 1.6, opacity: 0, duration: D.naik * 0.75, ease: "power2.in"}, D.locale + 0.34)
+        .to(this.fl, {opacity: 0, duration: 0.2}, D.locale + D.naik - 0.18)
+
+      /* 3. LEDAKAN 2,2 -> 2,6 dtk: kilatan radial, cincin cahaya melebar,
+         serpihan kertas lentera dan percikan (maksimal 40 partikel). */
+        .call(function () { self.ledak(aura); }, [], D.locale + D.naik)
+        .fromTo(this.ring, {opacity: 0.95, scale: 0.2},
+          {opacity: 0, scale: 13, duration: D.ledakan + 0.3, ease: "power2.out"}, D.locale + D.naik)
+        .to(this.shout, {opacity: 0, duration: 0.2}, D.locale + D.naik + D.ledakan);
+    },
+
+    ledak(aura) {
+      try { if (navigator && navigator.vibrate) navigator.vibrate(28); } catch (err) {}
+      if (!hasGSAP || reduced()) return;
+
+      const kilat = el("div", "lflash");
+      kilat.setAttribute("aria-hidden", "true");
+      kilat.style.background = "radial-gradient(circle at 50% 46%, " + aura.inti +
+        " 0%, " + aura.mid + " 32%, " + aura.rindu + " 68%)";
+      document.body.appendChild(kilat);
+      gsap.fromTo(kilat, {opacity: 0}, {
+        opacity: 0.9, duration: 0.11, ease: "power2.out",
+        onComplete: function () {
+          gsap.to(kilat, {
+            opacity: 0, duration: 0.36, ease: "power2.in",
+            onComplete: function () { if (kilat.parentNode) kilat.parentNode.removeChild(kilat); }
+          });
+        }
+      });
+
+      const papan = el("div", "lfx");
+      papan.setAttribute("aria-hidden", "true");
+      document.body.appendChild(papan);
+      const total = Math.min(KMAX_PARTIKEL, 40);
+      const serpih = Math.round(total * 0.4);
+      const cx = window.innerWidth / 2, cy = window.innerHeight * 0.46;
+      for (let i = 0; i < total; i++) {
+        const p = el("i");
+        const awal = (i / total) * 6.2832 + Math.random() * 0.5;
+        const jarak = 90 + Math.random() * Math.min(window.innerWidth, window.innerHeight) * 0.55;
+        if (i < serpih) {
+          p.style.background = Math.random() > 0.6 ? aura.inti : "rgba(255, 240, 205, 0.92)";
+          p.style.clipPath = "polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)";
+        } else {
+          p.style.background = aura.inti;
+          p.style.borderRadius = "50%";
+          p.style.width = "0.3rem";
+          p.style.height = "0.3rem";
+        }
+        p.style.left = cx + "px";
+        p.style.top = cy + "px";
+        papan.appendChild(p);
+        gsap.fromTo(p, {opacity: 0.95, x: 0, y: 0, scale: 0.6, rotation: 0}, {
+          opacity: 0,
+          x: Math.cos(awal) * jarak,
+          y: Math.sin(awal) * jarak + 130,
+          scale: 1 + Math.random() * 0.5,
+          rotation: (Math.random() - 0.5) * 620,
+          duration: 1.05 + Math.random() * 0.75,
+          ease: "power2.out"
+        });
+      }
+      setTimeout(function () { if (papan.parentNode) papan.parentNode.removeChild(papan); }, 2600);
+    },
+
+    /* ================================================ KARTU / REVEAL ===== */
+    /* mode: "penuh" (satu tarikan) | "singkat" (x10) | "buka" (riwayat atau
+       kartu di layar hasil) | "bonus". onLanjut dipanggil saat pengguna menekan
+       Lanjut, Escape, atau tap di mana saja. */
+    kartu(m, mode, onLanjut) {
+      const self = this;
+      this.phase = "card";
+      this.cur = m;
+      this.onLanjut = onLanjut;
+      this.paralaksKartu(false);
+      this.isi(m, mode === "penuh" || mode === "singkat");
+      /* foto di dalam kartu bisa diklik untuk memperbesar; kartu bonus
+         memakai foto bersama, jadi dari situ juga bisa dibuka penuh layar */
+      if (this.art) {
+        this.art.style.cursor = "zoom-in";
+        this.art.setAttribute("role", "button");
+        this.art.setAttribute("tabindex", "0");
+        this.art.setAttribute("aria-label", "Perbesar foto " + m.nama);
+        const besar = function () {
+          if (self.daftarZoom && self.daftarZoom.length) {
+            const i = self.daftarZoom.findIndex(function (d) { return d.m.id === m.id; });
+            if (i >= 0) { self.zoomBuka(i); return; }
+          }
+          /* kartu bonus belum ada di Riwayat: buka dengan daftar seadanya */
+          self.daftarZoom = [{ m: m, cap: m.kalimat || m.nama }];
+          self.zoomBuka(0);
+        };
+        this.art.addEventListener("click", besar);
+        this.art.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); besar(); }
+        });
+      }
+      this.buka("card");
+      if (this.next) this.next.textContent = mode === "bonus" ? "Tutup" : "Lanjut";
+      this.skipun(mode === "penuh" || mode === "singkat");
+      this.saya("Kamu mendapat: " + m.nama);
+
+      if (!hasGSAP || reduced() || mode === "buka") {
+        if (this.tl) { this.tl.kill(); this.tl = null; }
+        this.selesaiReveal(true);
+        if (hasGSAP && !reduced()) {
+          gsap.fromTo([this.art, this.namaHuruf, this.stamp, this.note],
+            {opacity: 0}, {opacity: 1, duration: 0.3, stagger: 0.05, ease: "power1.out"});
+        }
+        if (this.next) this.next.focus({preventScroll: true});
+        return;
+      }
+
+      const D = LENTERA.DURASI;
+      const bonus = mode === "bonus";
+      const dur = mode === "singkat" ? D.singkat + 0.9 : D.reveal;
+      const marks = this.marks;
+
+      const tl = gsap.timeline({
+        onComplete: function () {
+          self.tl = null;
+          self.skipun(false);
+          self.paralaksKartu(true);
+        }
+      });
+      this.tl = tl;
+
+      /* foto meluncur masuk dengan miring sedikit */
+      tl.fromTo(this.art, {opacity: 0, x: 44, y: 24, rotate: 2.8, scale: 1.07},
+        {opacity: 1, x: 0, y: 0, rotate: -1.4, scale: 1, duration: dur * 0.7, ease: "power3.out"}, 0)
+        .fromTo(this.img, {opacity: 0, scale: 1.12},
+          {opacity: 1, scale: 1, duration: dur * 0.55, ease: "power2.out"}, 0.04)
+        /* nama raksasa, hanya garis tepi, di belakang foto */
+        .fromTo(this.ghost, {opacity: 0, x: -38, scale: 1.14},
+          {opacity: 1, x: 0, scale: 1, duration: dur * 0.8, ease: "power3.out"}, 0.1)
+        /* nama jelas di depan, masking per huruf */
+        .fromTo(this.namaHuruf, {yPercent: 120},
+          {yPercent: 0, duration: dur * 0.5, stagger: 0.032, ease: "power3.out"}, 0.22)
+        /* peran menempel seperti cap karet miring */
+        .fromTo(this.stamp, {opacity: 0, scale: 1.95, rotate: -21},
+          {opacity: 0.9, scale: 1, rotate: -7, duration: 0.42, ease: "back.out(2.4)"}, 0.46)
+        /* kalimat muncul seperti tulisan tangan */
+        .fromTo(this.note, {opacity: 0, y: 16, rotate: -1.6},
+          {opacity: 1, y: 0, rotate: 0, duration: 0.6, ease: "power2.out"}, 0.54)
+        .fromTo(this.from, {opacity: 0}, {opacity: 1, duration: 0.4}, 0.66);
+
+      /* lencana BARU */
+      tl.fromTo(this.badge, {opacity: 0, scale: 0.55, rotate: 15},
+        {opacity: 1, scale: 1, rotate: 6, duration: 0.42, ease: "back.out(3)"}, bonus ? 0.1 : 0.58);
+
+      /* lima lentera kecil menyala satu per satu (dekoratif, selalu 5) */
+      marks.forEach(function (mk) { mk.classList.remove("is-lit"); });
+      marks.forEach(function (mk, i) {
+        tl.call(function () { mk.classList.add("is-lit"); }, [], (bonus ? 0.2 : 0.62) + i * (bonus ? 0.06 : 0.085));
+      });
+
+      if (this.next) this.next.focus({preventScroll: true});
+    },
+
+    /* Isi kartu. Foto SELALU memenuhi lebar kartu: .lcard__art memakai
+       width 100% dan aspect-ratio 4/5, lalu img-nya object-fit: cover dengan
+       object-position dari field fokus. Tidak ada lagi area krem di sisi foto. */
+    isi(m, denganBadge) {
+      const self = this;
+      this.art.style.setProperty("--fx", m.fx + "%");
+      this.art.style.setProperty("--fy", m.fy + "%");
+      this.art.classList.remove("is-no-foto");
+      this.img.classList.remove("is-on");
+      this.img.onload = function () { self.img.classList.add("is-on"); };
+      this.img.onerror = function () { self.art.classList.add("is-no-foto"); };
+      this.img.alt = "Foto " + m.nama;
+      this.img.src = m.foto;
+      this.call.textContent = m.panggilan ? "@" + m.panggilan : (m.isBonus ? "kartu bonus" : "anggota");
+      this.ghost.textContent = m.isBonus ? "Bersama" : m.nama;
+      this.huruf(m.nama);
+      this.stamp.textContent = m.peran || "";
+      this.stamp.hidden = !m.peran;
+      this.note.textContent = m.kalimat || "";
+      this.note.hidden = !m.kalimat;
+      this.from.textContent = m.asal || "";
+      this.from.hidden = !m.asal;
+      this.badge.hidden = !denganBadge;
+    },
+
+    /* nama dipecah jadi span per huruf supaya bisa dimasking dengan yPercent */
+    huruf(teks) {
+      const n = this.name;
+      while (n.firstChild) n.removeChild(n.firstChild);
+      const arr = [];
+      /* panah -> span, supaya tiap huruf bisa dianimasikan sendiri */
+      String(teks).split("").forEach(function (c) {
+        if (c === " ") { n.appendChild(document.createTextNode(" ")); return; }
+        const s = document.createElement("span");
+        s.textContent = c;
+        n.appendChild(s);
+        arr.push(s);
+      });
+      this.namaHuruf = arr;
+    },
+
+    /* Reveal singkat untuk kartu kedua dan seterusnya pada Tarik x10. */
+    singkatBerikut() {
+      const langkah = () => {
+        if (this.batchIdx >= this.batch.length) { this.selesaiBatch(); return; }
+        const m = this.batch[this.batchIdx++];
+        this.kartu(m, "singkat", langkah);
+      };
+      langkah();
+    },
+
+    /* -------------------- selesai satu tarikan: catat riwayat, lalu berikutnya */
+    selesaiBatch() {
+      const banyak = this.batchN;
+      const habis = this.antre.length === 0;
+      const tarikan = this.batch.slice();
+      this.keluar = this.keluar.concat(tarikan);
+      this.batch = [];
+      this.busy = false;
+      this.gambarRiwayat();
+      this.perbarui();
+      /* harus di-set sebelum cabang x10: kalau antrean habis, kartu bonus
+         tetap muncul setelah layar hasil ditutup */
+      if (habis) this.perluBonus = true;
+
+      if (banyak > 1) {
+        this.phase = "grid";
+        this.gridT.textContent = "Hasil tarikan · " + banyak + " orang";
+        this.tampilGrid(tarikan);
+        return;
+      }
+      if (habis) { this.tampilBonus(); return; }
+      this.tutup();
+    },
+
+    /* Layar hasil Tarik x10: grid foto, 2 kolom di HP dan 5 di desktop. */
+    tampilGrid(list) {
+      const self = this;
+      while (this.gridList.firstChild) this.gridList.removeChild(this.gridList.firstChild);
+      const cells = [];
+      list.forEach(function (m) {
+        const li = el("li");
+        const b = el("button", "lgrid__cell");
+        b.type = "button";
+        b.style.setProperty("--fx", m.fx + "%");
+        b.style.setProperty("--fy", m.fy + "%");
+        b.setAttribute("aria-label", m.nama + " — buka kartunya");
+        const im = new Image();
+        im.loading = "lazy";
+        im.decoding = "async";
+        im.alt = "Foto " + m.nama;
+        im.src = m.thumb;
+        b.appendChild(im);
+        b.appendChild(el("b", null, m.panggilan || m.nama));
+        b.addEventListener("click", function () {
+          self.kartu(m, "buka", function () { self.tutupAtauBonus(); });
+        });
+        li.appendChild(b);
+        self.gridList.appendChild(li);
+        cells.push(b);
+      });
+      this.buka("grid");
+      if (hasGSAP && cells.length) {
+        if (reduced()) {
+          gsap.fromTo(cells, {opacity: 0}, {opacity: 1, duration: 0.24, stagger: 0.03});
+        } else {
+          gsap.fromTo(cells, {opacity: 0, y: 18, scale: 0.94},
+            {opacity: 1, y: 0, scale: 1, duration: 0.42, stagger: 0.05, ease: "power3.out"});
+        }
+      }
+      if (this.close) this.close.focus({preventScroll: true});
+      this.saya(list.length + " orang keluar sekaligus.");
+    },
+
+    /* ------------- setelah semua keluar: pesan, tombol Acak ulang, bonus -- */
+    tampilBonus() {
+      this.perluBonus = false;
+      if (this.done) this.done.hidden = false;
+      const b = window.fotoBersama;
+      if (!b || !b.caption) return;
+      const m = {
+        id: "__bersama", isBonus: true, nama: "Foto bersama", panggilan: "bonus",
+        peran: "setelah semua terkumpul", asal: "", kalimat: b.caption,
+        foto: b.foto ? KDIR + b.foto : "", thumb: "", fx: 50, fy: 35
+      };
+      this.fotoBersama = {
+        id: m.id, isBonus: true, nama: "Foto bersama", panggilan: "bonus",
+        foto: m.foto, thumb: m.foto, fx: 50, fy: 35, kalimat: b.caption
+      };
+      this.bonusMuncul = true;
+      this.gambarRiwayat();
+      this.kartu(m, "bonus", function () { this.tutup(); }.bind(this));
+      this.saya("Kartu bonus terbuka: foto bersama.");
+    },
+
+    /* ------------------------------------------- penonton foto membesar --
+       Dipakai Riwayat dan foto di kartu bonus: klik -> foto penuh layar,
+       panah kiri/kanan pindah, Escape atau klik di luar menutup. */
+    zoomTerbuka() { return !!(this.zoom && !this.zoom.hidden); },
+
+    zoomBuka(i) {
+      const d = (this.daftarZoom || [])[i];
+      if (!d || !this.zoom) return;
+      const self = this;
+      this.zoomIdx = i;
+      this.zoom.hidden = false;
+      this.zoomImg.classList.remove("is-on");
+      this.zoomCap.classList.remove("is-on");
+      this.zoomImg.src = d.m.foto;
+      this.zoomImg.alt = "Foto " + d.m.nama;
+      this.zoomCap.textContent = d.cap || "";
+      lockScroll(true);
+
+      /* gambar membesar setelah foto benar-benar selesai dimuat, supaya
+         tidak muncul gepeng lalu melebar */
+      const tampil = function () {
+        self.zoomImg.classList.add("is-on");
+        self.zoomCap.classList.add("is-on");
+      };
+      if (this.zoomImg.complete && this.zoomImg.naturalWidth) tampil();
+      else this.zoomImg.addEventListener("load", tampil, { once: true });
+
+      if (this.zoomClose) this.zoomClose.focus({ preventScroll: true });
+      this.saya("Foto diperbesar: " + d.m.nama);
+    },
+
+    zoomGeser(arah) {
+      if (!this.daftarZoom || !this.daftarZoom.length) return;
+      const n = this.daftarZoom.length;
+      const berikut = ((this.zoomIdx === null ? 0 : this.zoomIdx) + arah + n) % n;
+      this.zoomBuka(berikut);
+    },
+
+    zoomTutup() {
+      if (!this.zoomTerbuka()) return;
+      this.zoom.hidden = true;
+      this.zoomIdx = null;
+      this.zoomImg.classList.remove("is-on");
+      this.zoomCap.classList.remove("is-on");
+      this.zoomImg.removeAttribute("src");
+      /* scroll hanya dilepas kalau layar kartu memang sedang tertutup */
+      if (!this.terbuka()) lockScroll(false);
+    },
+
+    tarikLagi() {
+      const mode = this.antre.length >= 2 ? "sepuluh" : "satu";
+      this.perluBonus = false;
+      this.tutup();
+      this.mulai(mode);
+    },
+
+    tutupAtauBonus() {
+      if (this.perluBonus) { this.tampilBonus(); return; }
+      this.tutup();
+    },
+
+    /* ---------------------------------------------------------- riwayat */
+    gambarRiwayat() {
+      while (this.thumbs.firstChild) this.thumbs.removeChild(this.thumbs.firstChild);
+      this.history.hidden = !this.keluar.length;
+      const self = this;
+      /* diacak supaya riwayatnya tidak terlihat berurutan seperti antrean */
+      const urut = this.keluar.slice();
+      for (let i = urut.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = urut[i]; urut[i] = urut[j]; urut[j] = t;
+      }
+      const daftar = urut.map(function (m) { return { m: m, cap: m.nama }; });
+      /* foto bersama jadi kotak terakhir di Riwayat, baru bisa diklik */
+      if (this.bonusMuncul && this.fotoBersama) {
+        daftar.push({ m: this.fotoBersama, cap: this.fotoBersama.nama, bersama: true });
+      }
+      /* daftar ini juga jadi sumber navigasi panah di penonton foto */
+      self.daftarZoom = daftar;
+
+      daftar.forEach(function (d, i) {
+        const m = d.m;
+        const li = el("li", "lent__thumb");
+        if (d.bersama) li.classList.add("lent__thumb--bersama");
+        li.style.setProperty("--fx", m.fx + "%");
+        li.style.setProperty("--fy", m.fy + "%");
+        li.tabIndex = 0;
+        li.setAttribute("role", "button");
+        li.setAttribute("aria-label", "Perbesar foto " + m.nama);
+        const im = new Image();
+        im.loading = "lazy";
+        im.decoding = "async";
+        im.alt = "Foto " + m.nama;
+        im.src = m.thumb;
+        im.addEventListener("load", function () { li.classList.add("is-seen"); });
+        li.appendChild(im);
+        li.appendChild(el("b", null, m.panggilan || m.nama));
+        const buka = function () { self.zoomBuka(i); };
+        li.addEventListener("click", buka);
+        li.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); buka(); }
+        });
+        self.thumbs.appendChild(li);
+      });
+    },
+
+    /* ============================ overlay: buka, lewati, tutup =========== */
+    terbuka() { return !!(this.ov && this.ov.classList.contains("is-open")); },
+    sedangAnimasi() { return !!(this.tl && this.tl.isActive && this.tl.isActive()); },
+
+    buka(state) {
+      const baru = !this.terbuka();
+      if (baru) this.lastFocus = document.activeElement;
+      this.ov.dataset.lent = state;
+      this.ov.hidden = false;
+      this.ov.classList.add("is-open");
+      this.ov.classList.toggle("is-plain", !hasGSAP || reduced());
+      this.cast.hidden = state !== "cast";
+      this.card.hidden = state !== "card";
+      this.grid.hidden = state !== "grid";
+      this.acts.hidden = state !== "card";
+      lockScroll(true);
+      /* layar menggelap lebih lambat saat CAST: itu bagian anticsinya. */
+      if (baru) {
+        const d = state === "cast" ? LENTERA.DURASI.locale * 0.55 : 0.26;
+        if (hasGSAP && !reduced()) {
+          gsap.fromTo(this.ov, {opacity: 0}, {opacity: 1, duration: d, ease: "power2.out"});
+        } else {
+          gsap && gsap.set && gsap.set(this.ov, {opacity: 1});
+        }
+      }
+    },
+    skipun(v) { if (this.skip) this.skip.hidden = !v; },
+
+    /* Lewati. Satu tarikan: lompat ke hasil akhir tarikan itu. Tarik x10:
+       langsung ke layar hasil. */
+    lewati() {
+      if (this.phase === "grid") { this.tutupAtauBonus(); return; }
+      if (this.tl) { this.tl.kill(); this.tl = null; }
+      Langit.tarik(null);
+      this.kedip(LENTERA.KEDIP.dasar);
+      this.racik();
+      this.skipun(false);
+      this.saya("");
+      if (this.batchN > 1) { this.selesaiBatch(); return; }
+      if (this.phase === "cast" && this.cur) {
+        this.kartu(this.cur, "buka", this.lanjutFn);
+        return;
+      }
+      this.selesaiReveal(false);
+    },
+
+    /* Lanjut / Esc / tap: lanjutkan ke langkah berikutnya */
+    lanjut() {
+      if (this.phase === "grid") { this.tutupAtauBonus(); return; }
+      if (this.sedangAnimasi()) { this.lewati(); return; }
+      const f = this.onLanjut;
+      this.onLanjut = null;
+      if (f) f();
+    },
+
+    /* Kembalikan semua transform/opacity inline ke kondisi CSS, supaya
+       transisi CSS dan keyframes api lentera tidak ikut terganggu. Lapis bukit
+       tidak pernah disentuh karena parallax-nya lewat custom property. */
+    racik() {
+      this.kedip(LENTERA.KEDIP.dasar);
+      if (!hasGSAP || !gsap.set) return;
+      gsap.set([this.ov, this.card, this.grid, this.glow, this.lantern, this.halo,
+                this.body, this.flame, this.sec, this.fl, this.trail, this.ring,
+                this.shout],
+        {clearProps: "transform,opacity"});
+      this.ov.style.opacity = "";
+    },
+    /* Habiskan reveal yang sedang berjalan: kartu langsung tampil utuh. */
+    selesaiReveal(sendos) {
+      if (hasGSAP && gsap.set) {
+        gsap.set([this.art, this.img, this.ghost, this.stamp, this.note, this.from, this.badge],
+          {clearProps: "transform,opacity"});
+      }
+      if (!sendos) this.marks.forEach(function (mk) { mk.classList.add("is-lit"); });
+    },
+
+    tutup() {
+      const self = this;
+      this.paralaksKartu(false);
+      if (!this.terbuka()) { this.busy = false; this.perbarui(); return; }
+      if (this.tl) { this.tl.kill(); this.tl = null; }
+      this.onLanjut = null;
+      this.lanjutFn = null;
+      this.racik();
+      const selesai = function () {
+        self.ov.classList.remove("is-open");
+        self.ov.hidden = true;
+        self.cast.hidden = true;
+        self.card.hidden = true;
+        self.grid.hidden = true;
+        self.acts.hidden = true;
+        self.skipun(false);
+        lockScroll(false);
+        if (self.lastFocus && self.lastFocus.focus) {
+          try { self.lastFocus.focus({preventScroll: true}); } catch (err) { self.lastFocus.focus(); }
+        }
+        self.lastFocus = null;
+        self.phase = "kosong";
+        self.busy = false;
+        self.perbarui();
+      };
+      if (!hasGSAP || reduced()) { selesai(); return; }
+      gsap.to([this.ov, this.card, this.grid], {
+        opacity: 0, duration: 0.24, ease: "power2.in", onComplete: selesai
+      });
+    },
+
+    /* Fokus terkurung di dalam overlay selama terbuka. */
+    jebak(e) {
+      const f = $$("button", this.box).filter(function (b) { return b.offsetParent !== null; });
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    },
+
+    /* Kecepatan berkedipnya api lentera */
+    kedip(detik) {
+      if (this.flame && this.flame.style) this.flame.style.animationDuration = detik + "s";
+    }
+  };
+
+/* ------------------------------------------------- 4e. CETAKAN (dinding)
+
+     Dinding hasil cetak: foto ditempel seperti cetakan kertas — bingkai tebal,
+     lakban di atas, miring sedikit dan berbeda tiap foto. Section ini STATIS
+     sepenuhnya: tidak ada pin, tidak ada scrub, tidak ada timer, tidak ada
+     GSAP. Hanya masonry CSS columns + lazy-load + lightbox, jadi tidak mungkin
+     merusak scroll halaman dan tidak menarik GSAP untuk apa pun.
+
+     SUMBER DATA
+     Foto ber- bagian:"cetakan" di data/photos.js, sesuai urutan file. Kalau
+     tidak ada satu pun foto untuk bagian ini, section disembunyikan supaya
+     tidak muncul judul tanpa isi.
+
+     Miring & sudut lakban dihitung dari sebar() (rasio emas per nomor urut),
+     jadi tiap cetakan dapat sudut berbeda, tetap sama tiap refresh, dan tidak
+     berkedip saat halaman dimuat ulang.
+
+     Reveal-nya murni CSS: class "is-in" ditambahkan saat item masuk layar, dan
+     transisinya sudah ditulis di style.css. Jadi modul ini tidak memanggil GSAP
+     sama sekali, dan kalau observer gagal atau JS berat, tetap ada jaring
+     pengaman: 2 detik depois semua cetakan ditampilkan.                     */
+
+  const Prints = {
+    sec: null, wall: null, meta: null,
+    idx: [], io: null, built: false,
+
+    build() {
+      const self = this;
+      this.sec  = $("#cetakan");
+      this.wall = $("#printsWall");
+      this.meta = $("#printsMeta");
+      if (!this.sec || !this.wall || this.built) return;
+      this.built = true;
+
+      const m = ofPart("cetakan");
+      if (!m.length) { this.sec.hidden = true; return; }
+      this.idx = m;
+
+      m.forEach(function (i, k) {
+        const p = DATA[i];
+        if (!p) return;
+        const li = el("li", "prints__item");
+        /* miring <= 2,4 derajat, sudut lakban <= 8 derajat */
+        li.style.setProperty("--jr", ((sebar(k, 0) - 0.5) * 4.8).toFixed(2) + "deg");
+        li.style.setProperty("--jt", ((sebar(k, 0.5) - 0.5) * 16).toFixed(2) + "deg");
+
+        const tape = el("span", "prints__tape");
+        tape.setAttribute("aria-hidden", "true");
+        li.appendChild(tape);
+
+        /* figure dipakai supaya figcaption punya induk yang sah (dulu caption
+           langsung menempel ke <li> — HTML tidak valid dan layar baca akan
+           membacanya sebagai teks lepas). */
+        const fig = el("figure", "prints__fig");
+
+        const btn = el("button", "prints__btn");
+        btn.type = "button";
+        btn.setAttribute("aria-label", "Buka foto: " + (p.caption || ""));
+        const im = imgOf(p, false, true);        /* varian -sm 900px, lazy */
+        btn.appendChild(im);
+        btn.addEventListener("click", function () {
+          lbOpen(i, im, self.idx);              /* navigasi = seluruh Cetakan */
+        });
+        fig.appendChild(btn);
+
+        const cap = el("figcaption", "prints__cap", p.caption || "");
+        cap.appendChild(el("span", "prints__no",
+          "no " + pad2(k + 1) + (p.tanggal ? " · " + p.tanggal : "")));
+        fig.appendChild(cap);
+        li.appendChild(fig);
+
+        self.wall.appendChild(li);
+      });
+
+      if (this.meta) {
+        const tgl = {};
+        m.forEach(function (i) { if (DATA[i] && DATA[i].tanggal) tgl[DATA[i].tanggal] = 1; });
+        const hari = Object.keys(tgl);
+        this.meta.textContent = m.length + " foto" +
+          (hari.length === 1 ? " · " + hari[0] : " · " + hari.length + " tanggal");
+      }
+      /* kepala section tetap tersembunyi sampai isi benar-benar ada */
+      this.sec.classList.add("is-ready");
+      this.watch();
+    },
+
+    /* Cetakan muncul satu per satu saat masuk layar. Tanpa IntersectionObserver
+       semua langsung tampil, dan ada jaring pengaman 2 detik. */
+    watch() {
+      const self = this;
+      const items = $$(".prints__item", this.wall);
+      if (!items.length) return;
+      const tampilkan = function (it) { it.classList.add("is-in"); };
+
+      if ("IntersectionObserver" in window) {
+        this.io = new IntersectionObserver(function (es) {
+          es.forEach(function (e) {
+            if (!e.isIntersecting) return;
+            tampilkan(e.target);
+            self.io.unobserve(e.target);
+          });
+        }, { rootMargin: "0px 0px -10% 0px", threshold: 0.1 });
+        items.forEach(function (it) { self.io.observe(it); });
+      } else {
+        items.forEach(tampilkan);
+        return;
+      }
+      setTimeout(function () {
+        items.forEach(function (it) {
+          if (it.classList.contains("is-in")) return;
+          tampilkan(it);
+          if (self.io) self.io.unobserve(it);
+        });
+      }, 2000);
+    }
+  };
+
+
   /* ------------------------------------------------- 4c. JEJAK (titik singgah)
 
      Peta lapangan: satu jalur putus-putus yang digambar pelan-pelan mengikuti
@@ -3316,13 +4483,15 @@
         { sel: "#jemuran",  name: "Jemuran"  },
         { sel: "#rolfilm",  name: "Rol film" },
         { sel: "#jejak",    name: "Jejak"    },
+        { sel: "#kenalan",  name: "Kenalan"  },
+        { sel: "#cetakan",  name: "Cetakan"  },
         { sel: "#galeri",   name: "Semua foto" },
         { sel: "#madding",  name: "Madding"  },
         { sel: "#catatan",  name: "Penutup"  }
       ];
       const list = nodes.filter(function (n) {
         const node = $(n.sel);
-        return node && node.offsetParent !== null;
+        return node && !node.hidden && node.offsetParent !== null;
       });
       stops = list.map(function (n) {
         const node = $(n.sel);
@@ -4601,6 +5770,8 @@
     Rope.build();
     Film.build();
     Jejak.build();
+    Lentera.build();
+    Prints.build();
     Madd.build();
     maddingUI();
     fallingLeaves();

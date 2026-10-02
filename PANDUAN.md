@@ -125,10 +125,12 @@ Bisa juga dihapus manual dari Upstash console: hapus elemen dari `kkn:notes`.
 ```
 web-galeri-kkn/
 ├── index.html          # markup; section baru + dua modal
-├── style.css           # tali, kayu, sticky note, Jejak, tirai transisi
-├── script.js           # modul Rope, Film, Jejak, Archive & Madd (Madding)
-├── data/photos.js      # 171 foto: src, small, bagian, tanggalISO, caption
-├── assets/foto/        # 171 foto WebP 1600px + 171 varian -sm 900px (lazy-load)
+├── style.css           # tali, kayu, sticky note, Jejak, Kenalan, Cetakan, tirai
+├── script.js           # modul Rope, Film, Jejak, Kenalan, Prints, Archive & Madd
+├── data/photos.js      # 177 foto: src, small, bagian, tanggalISO, caption
+├── data/anggota.js     # 13 anggota + foto bersama (sumber data mesin kapsul)
+├── assets/foto/        # 177 foto WebP + 177 varian -sm (lazy-load)
+├── assets/anggota/     # 13 foto anggota WebP + 13 varian -sm (bikin kartu)
 ├── assets/             # foto asli dari kamera (tidak ikut deploy, lihat .vercelignore)
 └── api/notes.js        # fungsi serverless (Node, tanpa dependensi)
 ```
@@ -149,6 +151,7 @@ satu field `bagian` yang menentukan section tempatnya tampil:
 | jemuran   | 30     | foto-21 .. foto-50      | Jemuran (tali jemuran, HP)         |
 | film      | 14     | foto-51 .. foto-64      | Rol film (khusus HP <= 768px)      |
 | jejak     | 107    | foto-65 .. foto-171     | Jejak                              |
+| cetakan   | 6      | foto-172, 173, 175-178 | Cetakan (dinding hasil cetak)      |
 
 Aturan mainnya: **satu foto hanya boleh punya satu `bagian`**, jadi tidak ada
 foto yang tampil di dua section tetap. Kalau `bagian` dihapus, fotonya otomatis
@@ -156,9 +159,9 @@ masuk ke `jejak`.
 
 Dua pengecualian yang disengaja:
 
-- **Semua foto** (arsip) menampilkan seluruh 171 foto apa adanya, karena memang
+- **Semua foto** (arsip) menampilkan seluruh 177 foto apa adanya, karena memang
   inspector galeri. Dipaginasikan 36 foto per klik lewat tombol
-  "Muat foto berikutnya" supaya tidak memuat 171 elemen sekaligus.
+  "Muat foto berikutnya" supaya tidak memuat 177 elemen sekaligus.
 - **Madding** adalah papaneken, isinya foto yang dipilih pengunjung sendiri.
 
 Mengubah jatah cukup mengedit nilai `bagian`; `index.html`, `style.css`, dan
@@ -217,9 +220,75 @@ reveal mengikuti posisi horizontal track yang sedang tampil, dihitung di
 Jejak hanya memuat varian `-sm` (900px), dan thumbnail baru dimuat kalau
 titiknya sudah masuk layar.
 
+### Cetakan
+
+Section **Cetakan** (`<section class="prints" id="cetakan">`) adalah dinding
+hasil cetak untuk foto ber-`bagian: "cetakan"`. Berdiri sendiri di antara Jejak
+dan "Semua foto", dan sengaja **tidak** memakai pin/scrub/GSAP seperti Jejak:
+modul `Prints` di `script.js` hanya membangun masonry, reveal, dan lightbox,
+jadi tidak mungkin merusak scroll halaman dan tidak menarik GSAP untuk apa pun.
+
+- Tiap foto jadi satu cetakan: bingkai kertas, lakban di atas, miring sedikit.
+  Sudut miring dan sudut lakban dihitung dari `sebar()` (rasio emas per nomor
+  urut), jadi tiap cetakan berbeda tapi sama tiap refresh — tidak berkedip.
+- **Bentuk cetakan mengikuti rasio foto aslinya, tidak dipaksa landscape.** Ada
+  foto potret (3:4) dan foto landscape (3:2) bercampur, jadi dindingnya memang
+  tidak simetris dan tinggi masonry tiap kolom berbeda. Alasannya: foto HP
+  yang potret tidak boleh dipotong, dan dipaksa 16/9 akan membuang sebagian
+  isi foto. `w`/`h` di `data/photos.js` sudah sesuai ukuran file, jadi
+  `height: auto` tidak bikin layout shift.
+- Kolom `3` di desktop, `2` di <= 860px, `1` di <= 420px.
+- Varian yang dimuat hanya `-sm` + `loading="lazy"` (potret 675x900,
+  landscape 900x600).
+- Lightbox berpindah di antara 6 foto Cetakan saja.
+
+**Penting saat menambah foto Cetakan:** HP menyimpan foto potret tetap
+landscape + EXIF `Orientation = 6`, jadi file JPG-nya 4032 x 3024 padahal
+tampil potret. Kalau di-crop atau di-WebP-kan tanpa
+`ImageOps.exif_transpose()` lebih dulu, hasilnya **terbalik 90 derajat** di
+browser. Selalu transpose dulu, baru crop, dan jangan memaksa rasio.
+- Baris metadata di kepala section ("6 foto ...") dihitung otomatis dari
+  `tanggal`.
+- Kalau `bagian: "cetakan"` tidak dipakai satu pun foto, section disembunyikan
+  (`hidden`) supaya tidak muncul judul tanpa isi. Menambah atau mengurangi
+  foto Cetakan cukup mengubah `data/photos.js` — jangan menyentuh
+  `index.html`, `script.js`, atau `style.css`.
+
+### Kenalan
+
+Section **Kenalan** (`<section class="gacha" id="kenalan">`) adalah mesin kapsul
+gacha untuk kenalan dengan anggota. Berdiri sendiri di antara Jejak dan
+Cetakan, tinggi minimum `100svh`, **tidak** di-pin, dan **tidak** memakai
+ScrollTrigger sama sekali — jadi tidak ada scroll panjang dan tidak bisa
+merusak scroll halaman. Modul `Kenalan` di `script.js` menyembunyikan section
+otomatis kalau `data/anggota.js` gagal dimuat atau isinya kosong.
+
+Semua angka (jumlah orang, slot koleksi, penghitung "n / 13 terkumpul") dihitung
+dari panjang `window.ANGGOTA`. Hasil undian diambil dari anggota yang belum
+keluar **tanpa pengembalian**, jadi tidak ada duplikat sampai semua keluar. Foto
+hasil di-preload saat animasi berjalan, dan koleksi disimpan di `localStorage`
+(key `kkn-kenalan`) sebagai daftar nama file, jadi urutan data boleh diubah
+tanpa merusak koleksi.
+
+Tambah anggota cukup menambah satu blok di `data/anggota.js`:
+
+```js
+{ nama: "Nama Lengkap", panggilan: "nama", peran: "Bagian",
+  asal: "Asal", kalimat: "Kalimat singkat", foto: "nama-file.webp" },
+```
+
+- `foto` = nama file di `assets/anggota/`. Varian thumbnail diturunkan otomatis
+  menjadi `nama-file-sm.webp`, jadi kedua file itu wajib ada.
+- `fokus` opsional, `{ x: 50, y: 35 }` dalam persen: menentukan titik wajah saat
+  foto potret `9:16` dipotong jadi kartu dan thumbnail. Naikkan `y` kalau wajah
+  terlihat terlalu rendah. Nilai default dipakai kalau `fokus` tidak ada.
+- `fotoBersama` = `{ foto, caption }` untuk kartu bonus yang terbuka sendiri
+  setelah semua anggota terkumpul. Ganti kedua nilainya di `data/anggota.js` dan
+  taruh file fotonya di `assets/anggota/`.
+
 ### Mengganti caption
 
-Foto 51-171 masih memakai caption placeholder. Cari semuanya dengan:
+Foto 51-178 masih memakai caption placeholder. Cari semuanya dengan:
 
 ```bash
 grep -n "ganti caption ini" data/photos.js

@@ -1,5 +1,7 @@
-# Foto mentah dari kamera (~637 MB) tidak pernah dipakai halaman.
-# Yang di-deploy hanya assets/foto/ (WebP hasil optimasi, 18 MB).
+# Foto mentah dari kamera (~684 MB) tidak pernah dipakai halaman.
+# Yang di-deploy hanya assets/foto/ (WebP hasil optimasi, 26 MB) dan
+# assets/anggota/ (WebP anggota, ~1 MB). File JPG asli anggota di root
+# assets/ ikut tercakup pola di bawah, jadi tidak ikut ter-deploy.
 # Pola ditulis eksplisit, tanpa negasi, supaya tidak pernah ikut ter-deploy.
 assets/IMG_*
 assets/*.JPG

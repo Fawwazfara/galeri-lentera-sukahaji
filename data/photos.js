@@ -3,14 +3,16 @@
    foto, dan satu-satunya file yang dipakai HP maupun desktop (nambah foto di
    sini langsung muncul di KEDUA versi, tidak ada dua daftar terpisah).
 
-   ISI SEKARANG: 171 foto (foto-01 .. foto-171), semua sudah WebP.
+   ISI SEKARANG: 177 foto (foto-01 .. foto-178, TIDAK ada foto-174), semua WebP.
+   Nomor foto itu ID tetap, bukan urutan: foto-174 sengaja dihapus, jadi
+   penomoran melompat dari 173 ke 175. Jangan dipadatkan.
 
    SEMUA FOTO SUDAH DISATU FORMAT: WebP, lebar 1600px, kualitas 80.
    Aslinya campur JPG dan HEIC (HEIC bahkan tidak bisa dibuka browser), sudah
    dikonversi ke assets/foto/foto-NN.webp. PNG tidak dipakai untuk foto: ukurannya
    jauh lebih besar tanpa keuntungan.
 
-   !! CAPTION FOTO 51-171 MASIH PLACEHOLDER !!
+   !! CAPTION FOTO 51-178 MASIH PLACEHOLDER !!
    Caption terakhir masih "[FOTO NN — ganti caption ini] ...". Ganti manual di
    file ini. Cara cepat cari semuanya:
        grep -n "ganti caption ini" data/photos.js
@@ -18,12 +20,21 @@
 
    Struktur tiap entri:
      src     : path gambar penuh (1600px) - dipakai lightbox, Tumpukan, hero
-     small   : versi 900px untuk masonry, ROL FILM (HP), dan Jejak (hemat unduhan)
+     small   : versi 900px untuk masonry, ROL FILM (HP), Jejak, dan Cetakan
      bagian  : section tempat foto ini tampil. TEPAT SATU nilai per foto:
                  tumpukan : 20 foto  (foto-01 .. foto-20)
                  jemuran  : 30 foto  (foto-21 .. foto-50)
                  film     : 14 foto  (foto-51 .. foto-64)
                  jejak    : 107 foto (foto-65 .. foto-171)
+                 cetakan  : 6 foto   (foto-172, 173, 175, 176, 177, 178)
+                              -> section "Cetakan", dinding hasil cetak:
+                              bingkai kertas + lakban, masonry sendiri.
+                              Bentuk tiap cetakan mengikuti rasio foto
+                              aslinya (potret tetap potret, landscape tetap
+                              landscape) — tidak ada crop, tidak dipaksa 16:9.
+                              Tambah/hapus foto di sini cukup; kalau bagian
+                              "cetakan" dikosongkan semua, section-nya
+                              disembunyikan sendiri.
                Kalau bagian DIHAPUS, fotonya otomatis masuk "jejak".
                Jumlah foto per bagian boleh diubah bebas, asal tidak ada satu
                foto yang punya dua bagian (foto tidak boleh tampil dua kali di
@@ -34,9 +45,11 @@
      caption : judul singkat + 1 kalimat, gaya catatan lapangan
      tanggal : format bebas untuk ditampilkan (contoh: 15 Juli 2026)
      kategori : label kelompok, jadi tag kecil di bawah foto + chip filter
-     w / h   : ukuran asli (px) - dipakai width/height + aspect-ratio supaya
-               tidak ada layout shift. Semua foto kamera ini 1600 x 901 (kecuali
-               foto-171 yang 1600 x 900).
+     w / h   : ukuran file hasil konversi (px) - dipakai width/height + rasio
+               supaya tidak ada layout shift. Semua foto lama 1600 x 901
+               (kecuali foto-171 yang 1600 x 900). Foto Cetakan TIDAK seragam:
+               foto-172/173 = 1600 x 1067 (3:2 landscape), foto-175..178 =
+               1200 x 1600 (3:4 potret, sisi panjang dibatasi 1600).
 
    MENGUBAH JATAH SECTION
    Cukup ubah nilai bagian. Contoh, mau 25 foto masuk Tumpukan:
@@ -52,16 +65,23 @@
      disembunyikan sebagai tombol "+N" yang membuka lightbox hari itu juga.
    - Tanggal dengan lebih dari 4 foto otomatis mendapat tombol "+N".
 
-   CARA Nambah Foto Sampai 171
+   !! HATI-HATI EXIF: HP menyimpan foto potret tetap landscape + EXIF
+   Orientation = 6, jadi file JPG-nya 4032 x 3024 padahal tampil potret.
+   Kalau di-crop / di-WebP-kan tanpa "ImageOps.exif_transpose()" dulu, hasilnya
+   TERBALIK 90 DERAJAT di browser. Selalu transpose dulu, baru crop. Jangan
+   memaksa rasio: potret dibiarkan potret.
+
+   CARA Nambah Foto Sampai 178
    Cukup salin satu blok { } di bawah dan naikkan nomor. Tidak perlu menyentuh
    index.html, script.js, atau style.css sama sekali.
 
    CATATAN PERFORMA: section "Semua foto" sengaja dimuat bertahap 36 foto per
-   klik (tombol "Muat foto berikutnya"), bukan 171 sekaligus. Jejak juga hanya
-   memuat thumbnail foto di sekitar layar. Jadi 171 foto tetap ringan.
+   klik (tombol "Muat foto berikutnya"), bukan 178 sekaligus. Jejak juga hanya
+   memuat thumbnail foto di sekitar layar. Jadi 178 foto tetap ringan. Cetakan
+   cuma 7 foto, jadi tidak menambah beban.
 
-   Ukuran file: 171 x 1600px (17 MB total, rata-rata 101 KB) + 171 x 900px "-sm"
-   (7,7 MB). Foto mentah di assets/ (asli kamera, 637 MB) tidak pernah dimuat
+   Ukuran file: 178 x 1600px (26 MB total, rata-rata 150 KB) + 178 x 900px "-sm"
+   (7,9 MB). Foto mentah di assets/ (asli kamera, 684 MB) tidak pernah dimuat
    browser dan tidak ikut deploy — lihat .vercelignore.
 ============================================================================= */
 
@@ -261,7 +281,7 @@ window.PHOTOS = [
     tanggal: "25 Juli 2026", kategori: "Foto Senam",
     tanggalISO: "2026-07-25",
     bagian:   "jemuran",
-    caption: "katanyay cipung pengen banget foto pose senam nih." },
+    caption: "katanya cipung pengen banget foto pose senam nih." },
   { src:     "assets/foto/foto-29.webp",
     small:   "assets/foto/foto-29-sm.webp",
     w: 1600, h: 901,
@@ -1263,4 +1283,46 @@ window.PHOTOS = [
     tanggalISO: "2026-08-22",
     bagian:   "jejak",
     caption: "woy ini rame bgt anjir." },
+  { src:     "assets/foto/foto-172.webp",
+    small:   "assets/foto/foto-172-sm.webp",
+    w: 1600, h: 1067,
+    tanggal: "22 Agustus 2026", kategori: "Dokumentasi",
+    tanggalISO: "2026-08-22",
+    bagian:   "cetakan",
+    caption: "kakang sama agi mana jir kok gada." },
+  { src:     "assets/foto/foto-173.webp",
+    small:   "assets/foto/foto-173-sm.webp",
+    w: 1600, h: 1067,
+    tanggal: "22 Agustus 2026", kategori: "Dokumentasi",
+    tanggalISO: "2026-08-22",
+    bagian:   "cetakan",
+    caption: "fotonya kurang bagus karna gada kakang sama agi." },
+  { src:     "assets/foto/foto-175.webp",
+    small:   "assets/foto/foto-175-sm.webp",
+    w: 1200, h: 1600,
+    tanggal: "22 Agustus 2026", kategori: "Dokumentasi",
+    tanggalISO: "2026-08-22",
+    bagian:   "cetakan",
+    caption: "iziiiiiiiin #bigmo." },
+  { src:     "assets/foto/foto-176.webp",
+    small:   "assets/foto/foto-176-sm.webp",
+    w: 1200, h: 1600,
+    tanggal: "22 Agustus 2026", kategori: "Dokumentasi",
+    tanggalISO: "2026-08-22",
+    bagian:   "cetakan",
+    caption: "so sweeeeeeet bgt tuh coy." },
+  { src:     "assets/foto/foto-177.webp",
+    small:   "assets/foto/foto-177-sm.webp",
+    w: 1200, h: 1600,
+    tanggal: "22 Agustus 2026", kategori: "Dokumentasi",
+    tanggalISO: "2026-08-22",
+    bagian:   "cetakan",
+    caption: "peluk guling aja mas." },
+  { src:     "assets/foto/foto-178.webp",
+    small:   "assets/foto/foto-178-sm.webp",
+    w: 1200, h: 1600,
+    tanggal: "22 Agustus 2026", kategori: "Dokumentasi",
+    tanggalISO: "2026-08-22",
+    bagian:   "cetakan",
+    caption: "kelompok kalian cwok nya cuman 3?." },
 ];

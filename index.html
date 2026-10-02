@@ -4,12 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Catatan Lapangan — KKN [Nama Desa] [Tahun]</title>
-<meta name="description" content="Dokumentasi visual KKN Lentera Sukahaji di Sukahaji, 2026. 171 foto lapangan, disusun seperti jurnal." />
+<meta name="description" content="Dokumentasi visual KKN Lentera Sukahaji di Sukahaji, 2026. 177 foto lapangan, disusun seperti jurnal." />
 <meta name="theme-color" content="#F3EBD8" />
 
 <meta property="og:type" content="website" />
 <meta property="og:title" content="Catatan Lapangan — KKN [Nama Desa] [Tahun]" />
-<meta property="og:description" content="171 foto lapangan dari KKN Lentera Sukahaji." />
+<meta property="og:description" content="177 foto lapangan dari KKN Lentera Sukahaji." />
 <meta property="og:image" content="assets/foto/foto-01.webp" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -30,7 +30,7 @@
 <!-- indikator progres + penomoran foto -->
 <div class="rail" aria-hidden="true"><span class="rail__fill"></span></div>
 <div class="hud" aria-hidden="true">
-  <span class="hud__now">01</span><span class="hud__slash">/</span><span class="hud__all">171</span>
+  <span class="hud__now">01</span><span class="hud__slash">/</span><span class="hud__all">177</span>
 </div>
 
 <!-- peta lompat cepat + tombol ke atas (HP saja) -->
@@ -63,6 +63,7 @@
     <a href="#stack">Tumpukan</a>
     <a href="#jemuran">Jemuran</a>
     <a href="#jejak">Jejak</a>
+    <a href="#kenalan">Kenalan</a>
     <a href="#galeri">Semua foto</a>
     <a href="#madding">Madding</a>
     <a href="#catatan">Catatan</a>
@@ -86,7 +87,7 @@
       <p class="hero__lede">Sebagian besar waktu habis di jalan setapak, balai desa, dan sawah. Dokumentasi ini disusun berurutan seperti buku catatan, bukan seperti galeri pilihan.</p>
       <ul class="hero__facts">
         <li><b data-slot="hari">37</b><span>hari</span></li>
-        <li><b id="factTotal">171</b><span>foto</span></li>
+        <li><b id="factTotal">177</b><span>foto</span></li>
         <li><b>1</b><span>RW</span></li>
         <li><b>4</b><span>RT</span></li>
       </ul>
@@ -136,7 +137,7 @@
 
     <div class="rope__bar">
       <div class="rope__chips" id="ropeChips" role="group" aria-label="Filter kategori jemuran"></div>
-      <p class="rope__count"><b id="ropeNow">01</b><i>/</i><span id="ropeAll">171</span></p>
+      <p class="rope__count"><b id="ropeNow">01</b><i>/</i><span id="ropeAll">177</span></p>
     </div>
 
     <div class="rope__stage" id="ropeStage" tabindex="0" role="group"
@@ -230,11 +231,127 @@
     </div>
   </section>
 
+  <!-- 4d. KENALAN: "Lentera Kenangan". Gacha lentera kertas untuk kenalan
+       dengan anggota, konsep orisinal: suasana malam, siluet bukit dan sawah
+       berlapis, kunang-kunang, lalu satu lentera kertas besar di tengah.
+
+       TIDAK di-pin dan tidak butuh scroll panjang: min-height 100svh dan
+       semuanya muat dalam satu layar. Kontennya dibangun script.js dari
+       data/anggota.js, jadi menambah anggota cukup mengedit file data itu.
+       Antrean undian hidup di memori saja: muat ulang = acak ulang, tidak ada
+       localStorage di bagian ini sama sekali. -->
+  <section class="lent" id="kenalan">
+    <!-- gorengan + siluet latar. SVG murni, digambar sendiri. -->
+    <div class="lent__sky" aria-hidden="true">
+      <canvas class="lent__flies" id="lentFlies"></canvas>
+      <div class="lent__glow" id="lentGlow"></div>
+      <div class="lent__hills">
+        <svg class="lent__hill lent__hill--3" viewBox="0 0 1440 320" preserveAspectRatio="none" focusable="false">
+          <path fill="currentColor" d="M0 214c150-64 268-70 396-30 116 36 190 30 306-22 122-55 216-46 318 16 96 58 190 60 420 4v138H0Z"/>
+        </svg>
+        <svg class="lent__hill lent__hill--2" viewBox="0 0 1440 320" preserveAspectRatio="none" focusable="false">
+          <path fill="currentColor" d="M0 250c132-40 232-32 344 14 128 52 214 52 336 6 132-50 226-46 340 8 92 44 190 40 420-30v72H0Z"/>
+        </svg>
+        <svg class="lent__hill lent__hill--1" viewBox="0 0 1440 260" preserveAspectRatio="none" focusable="false">
+          <path fill="currentColor" d="M0 168c160-46 296-38 424 22 138 64 236 66 372 8 148-64 258-58 380 12 78 44 156 42 264 6v44H0Z"/>
+        </svg>
+        <!-- petak sawah: garis-garis tipis memberi kesan ladang, bukan aset
+           milik siapa pun. -->
+        <div class="lent__field" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="lent__horizon" aria-hidden="true"></div>
+    </div>
+
+    <div class="lent__inner">
+      <div class="lent__head">
+        <p class="tag tag--light"><span class="tag__no">04</span> Kenalan</p>
+        <h2 class="head head--light">Lentera Kenangan</h2>
+        <p class="lent__sub">KKN <span data-slot="kelompok">Lentera Sukahaji</span></p>
+      </div>
+
+      <!-- lentera kertas desa: badan melengkung dua sisi dengan satu garis
+           tengah, api di dalam, dua pita, dan tempat gantung. Asli semua. -->
+      <div class="lent__lantern" id="lentLantern">
+        <div class="lent__halo" id="lentHalo" aria-hidden="true"></div>
+        <div class="lent__paper" aria-hidden="true">
+          <span class="lent__ribbon lent__ribbon--l"></span>
+          <span class="lent__ribbon lent__ribbon--r"></span>
+          <svg class="lent__svg" viewBox="0 0 140 210" focusable="false" aria-hidden="true">
+            <g class="lent__cap">
+              <path d="M52 4h36v9H52z"/>
+              <rect x="48" y="13" width="44" height="7" rx="2.5"/>
+              <path d="M46 20h48l-4 9H50Z"/>
+            </g>
+            <g class="lent__body">
+              <path d="M46 29c-14 26-18 56-18 76s4 50 18 76h48c14-26 18-56 18-76s-4-50-18-76Z"/>
+              <path d="M70 29c-8 26-11 56-11 76s3 50 11 76" class="lent__rib-line"/>
+            </g>
+            <g class="lent__flame">
+              <path d="M70 104c-13 13-18 24-18 34 0 12 8 20 18 20s18-8 18-20c0-10-5-21-18-34Z"/>
+              <path d="M70 128c-5 6-7 11-7 16 0 6 3 10 7 10s7-4 7-10c0-5-2-10-7-16Z" class="lent__flame-core"/>
+            </g>
+            <g class="lent__foot">
+              <path d="M46 181h48l-4 9H50Z"/>
+              <rect x="52" y="190" width="36" height="7" rx="2.5"/>
+              <path d="M60 197h20v9H60z"/>
+            </g>
+            <g class="lent__string">
+              <path d="M70 4V-6"/>
+              <path d="M70 206v8"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="lent__controls">
+        <p class="lent__left" id="lentLeft">Tersisa <b>0</b> / <span>0</span></p>
+        <div class="lent__btns">
+          <button class="lent__btn lent__btn--main" id="lentOne" type="button">Tarik x1</button>
+          <button class="lent__btn" id="lentTen" type="button">Tarik x10</button>
+        </div>
+        <p class="lent__done" id="lentDone" hidden>
+          <span>Semua anggota sudah keluar. Muat ulang untuk mengacak lagi.</span>
+          <button class="lent__btn lent__btn--ghost" id="lentReshuffle" type="button">Acak ulang</button>
+        </p>
+        <p class="lent__hint"><span class="rule" aria-hidden="true"></span> <span>tarik lentera, satu orang keluar setiap kali</span></p>
+      </div>
+
+      <!-- Riwayat: foto mini anggota yang SUDAH keluar. Dikelola script.js,
+           tap untuk membuka kartunya lagi tanpa animasi. -->
+      <div class="lent__history" id="lentHistory" hidden>
+        <p class="lent__history-t">Riwayat</p>
+        <ul class="lent__thumbs" id="lentThumbs" aria-label="Anggota yang sudah keluar"></ul>
+      </div>
+
+      <p class="lent__live" id="lentLive" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- 4e. CETAKAN: dinding hasil cetak. Enam foto terakhir ditempel dengan
+       lakban kertas, miring sedikit seperti ditempel tangan. Bentuk cetakan
+       mengikuti rasio fotonya sendiri (potret tetap potret), jadi dindingnya
+       memang tidak simetris. Kontennya dibangun script.js dari foto ber-
+       bagian:"cetakan" di data/photos.js; kalau tidak ada foto untuk bagian
+       ini, section-nya disembunyikan sendiri. -->
+  <section class="prints" id="cetakan">
+    <div class="prints__head">
+      <p class="tag"><span class="tag__no">05</span> Cetakan</p>
+      <h2 class="head">Hasil cetak dari rol terakhir, ditempel rapi di dinding.</h2>
+      <p class="prints__meta" id="printsMeta">Menghitung…</p>
+    </div>
+    <ul class="prints__wall" id="printsWall"></ul>
+    <p class="prints__hint"><span class="rule" aria-hidden="true"></span> <span>klik foto untuk lihat lebih besar</span></p>
+  </section>
+
   <!-- 5. Semua foto: ARSIP. Semua foto ada di sini (termasuk yang sudah
        dipakai section lain), tapi dimuat bertahap lewat "Muat lebih banyak". -->
   <section class="wall" id="galeri">
     <div class="wall__head">
-      <p class="tag"><span class="tag__no">04</span> Semua foto</p>
+      <p class="tag"><span class="tag__no">06</span> Semua foto</p>
       <h2 class="head">Arsip lengkap, semuanya ada di sini.</h2>
       <ul class="legend" id="legend"></ul>
     </div>
@@ -248,7 +365,7 @@
   <!-- 6. Madding: papan catatan untuk teman-teman -->
   <section class="madding" id="madding">
     <div class="madding__head">
-      <p class="tag"><span class="tag__no">05</span> Madding</p>
+      <p class="tag"><span class="tag__no">07</span> Madding</p>
       <h2 class="head">Papan ini milik kita semua. Tinggal selip kertas, tanpa perlu akun.</h2>
       <div class="madding__tools">
         <button class="padbtn" id="padOpen" type="button">
@@ -271,7 +388,7 @@
   <section class="closing" id="catatan">
     <div class="closing__veil" aria-hidden="true"></div>
     <div class="closing__inner">
-      <p class="tag tag--light"><span class="tag__no">06</span> Penutup</p>
+      <p class="tag tag--light"><span class="tag__no">08</span> Penutup</p>
       <h2 class="head head--light">Terima kasih.</h2>
       <ul class="todo">
         <li><span>01</span> Kades dan jajarannya, terima kasih sudah mengarahkan dan mendampingi kami sepanjang kegiatan di desa.</li>
@@ -313,6 +430,95 @@
       <p class="lb__cap-meta"></p>
     </figcaption>
   </figure>
+</div>
+
+<!-- LAYAR TARIKAN (overlay) untuk Lentera Kenangan. Satu overlay dipakai untuk
+     tiga keadaan, dipindah lewat atribut data-lent, supaya tidak ada dua
+    -lapisan yang saling tumpuk:
+       data-lent="cast"  -> animasi satu tarikan (antisipasi, cahaya naik,
+                            ledakan, reveal splash art). Tombol "Lewati" ada
+                            selama animasi, dan tap di mana saja melanjutkannya.
+       data-lent="card"  -> reveal singkat (dipakai kartu kedua dan seterusnya
+                            pada Tarik x10), atau kartu yang dibuka dari Riwayat
+                            tanpa animasi sama sekali.
+       data-lent="batch" -> layar hasil Tarik x10: grid foto, ketuk kartu untuk
+                            membuka detailnya.
+
+     Tinggi konten dibatasi 90svh supaya SELURUH isi (foto, nama, peran,
+     kalimat, lencana) selalu utuh tanpa terpotong atau saling menimpa.
+     Tap di luar / Escape menutup. Scroll halaman dikunci selama overlay
+     terbuka (Lenis ikut berhenti), dan widget musik + tombol ke atas
+     disembunyikan lewat body:has() di style.css. -->
+<div class="lreveal" id="lentOverlay" role="dialog" aria-modal="true" aria-labelledby="lentName" data-lent="card" hidden>
+  <div class="lreveal__scrim" id="lentScrim"></div>
+
+  <div class="lreveal__box" id="lentBox">
+    <button class="lreveal__skip" id="lentSkip" type="button" aria-label="Lewati animasi">Lewati</button>
+
+    <!-- ---------- keadaan: satu tarikan ---------- -->
+    <div class="lent-pull" id="lentPull" hidden>
+      <div class="lent-pull__cast" id="lentCast">
+        <span class="lent-pull__fl" id="lentPullFl" aria-hidden="true"></span>
+        <span class="lent-pull__trail" id="lentPullTrail" aria-hidden="true"></span>
+        <span class="lent-pull__ring" id="lentPullRing" aria-hidden="true"></span>
+      </div>
+      <p class="lent-pull__shout" id="lentPullShout" aria-hidden="true"></p>
+    </div>
+
+    <!-- ---------- keadaan: kartu anggota ---------- -->
+    <div class="lcard" id="lentCard">
+      <div class="lcard__art" id="lentArt">
+        <span class="lcard__badge" id="lentBadge">BARU</span>
+        <span class="lcard__ghost" id="lentGhost" aria-hidden="true"></span>
+        <figure class="lcard__photo">
+          <img class="lcard__img" id="lentImg" alt="" />
+        </figure>
+        <span class="lcard__badges" id="lentBadges" aria-hidden="true">
+          <span class="lcard__mark"><svg viewBox="0 0 24 30" focusable="false"><path d="M6 3h12l-1.5 4H7.5ZM4 7h16l-1.6 17H5.6ZM8 20c0-2.4 1.6-4 4-4s4 1.6 4 4-1.6 3.4-4 3.4S8 22.4 8 20Z"/></svg></span>
+          <span class="lcard__mark"><svg viewBox="0 0 24 30" focusable="false"><path d="M6 3h12l-1.5 4H7.5ZM4 7h16l-1.6 17H5.6ZM8 20c0-2.4 1.6-4 4-4s4 1.6 4 4-1.6 3.4-4 3.4S8 22.4 8 20Z"/></svg></span>
+          <span class="lcard__mark"><svg viewBox="0 0 24 30" focusable="false"><path d="M6 3h12l-1.5 4H7.5ZM4 7h16l-1.6 17H5.6ZM8 20c0-2.4 1.6-4 4-4s4 1.6 4 4-1.6 3.4-4 3.4S8 22.4 8 20Z"/></svg></span>
+          <span class="lcard__mark"><svg viewBox="0 0 24 30" focusable="false"><path d="M6 3h12l-1.5 4H7.5ZM4 7h16l-1.6 17H5.6ZM8 20c0-2.4 1.6-4 4-4s4 1.6 4 4-1.6 3.4-4 3.4S8 22.4 8 20Z"/></svg></span>
+          <span class="lcard__mark"><svg viewBox="0 0 24 30" focusable="false"><path d="M6 3h12l-1.5 4H7.5ZM4 7h16l-1.6 17H5.6ZM8 20c0-2.4 1.6-4 4-4s4 1.6 4 4-1.6 3.4-4 3.4S8 22.4 8 20Z"/></svg></span>
+        </span>
+      </div>
+      <figcaption class="lcard__cap">
+        <p class="lcard__call" id="lentCall"></p>
+        <span class="lcard__namewrap"><h3 class="lcard__name" id="lentName"></h3></span>
+        <p class="lcard__stamp" id="lentPeran"></p>
+        <p class="lcard__note" id="lentNote"></p>
+        <p class="lcard__from" id="lentFrom"></p>
+      </figcaption>
+    </div>
+
+    <!-- ---------- keadaan: layar hasil Tarik x10 ---------- -->
+    <div class="lgrid" id="lentGrid" hidden>
+      <p class="lgrid__t" id="lentGridT">Hasil tarikan</p>
+      <ul class="lgrid__list" id="lentGridList"></ul>
+      <div class="lgrid__acts">
+        <button class="lreveal__btn" id="lentAgain" type="button">Tarik lagi</button>
+        <button class="lreveal__btn lreveal__btn--go" id="lentClose" type="button">Tutup</button>
+      </div>
+    </div>
+
+    <!-- ---------- tombol lanjut (satu tarikan & reveal singkat) ---------- -->
+    <div class="lreveal__acts" id="lentActs">
+      <button class="lreveal__btn lreveal__btn--go" id="lentNext" type="button">Lanjut</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- 4d-1. Penonton foto membesar (dipakai Riwayat & kartu bonus).
+     Dipisah dari .lreveal supaya bisa dibuka dari Riwayat tanpa ikut
+     sinematik kartu, dan punya tombol tutup sendiri. -->
+<div class="lzoom" id="lentZoom" role="dialog" aria-modal="true" aria-labelledby="lentZoomCap" data-lent-zoom="buka" hidden>
+  <div class="lzoom__scrim" id="lentZoomScrim"></div>
+  <figure class="lzoom__box">
+    <img class="lzoom__img" id="lentZoomImg" alt="" decoding="async">
+    <figcaption class="lzoom__cap" id="lentZoomCap"></figcaption>
+  </figure>
+  <button class="lzoom__close" id="lentZoomClose" type="button" aria-label="Tutup foto">
+    <span aria-hidden="true">&#215;</span>
+  </button>
 </div>
 
 <noscript>
@@ -465,6 +671,7 @@
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
 <script src="data/photos.js" defer></script>
+<script src="data/anggota.js" defer></script>
 <script src="script.js" defer></script>
 </body>
 </html>
