@@ -265,10 +265,15 @@ otomatis kalau `data/anggota.js` gagal dimuat atau isinya kosong.
 
 Semua angka (jumlah orang, slot koleksi, penghitung "n / 13 terkumpul") dihitung
 dari panjang `window.ANGGOTA`. Hasil undian diambil dari anggota yang belum
-keluar **tanpa pengembalian**, jadi tidak ada duplikat sampai semua keluar. Foto
-hasil di-preload saat animasi berjalan, dan koleksi disimpan di `localStorage`
-(key `kkn-kenalan`) sebagai daftar nama file, jadi urutan data boleh diubah
-tanpa merusak koleksi.
+keluar **tanpa pengembalian**, jadi tidak ada duplikat sampai semua keluar.
+Kartu pada `Tarik x10` ditampilkan berurutan lengkap dan **tidak berganti
+sendiri**: tiap kartu menunggu kamu menekan **Lanjut**, jadi sepuluh orang
+terlihat semua satu per satu. Mengetuk **Lanjut** saat animasi sedang berjalan
+hanya menuntaskan animasi kartu itu (bukan pindah atau menutup tarikan);
+ketukan berikutnya baru pindah ke orang berikutnya. Tombol **Lewati semua**
+yang melompat langsung ke layar hasil. Foto hasil di-preload saat animasi
+berjalan, dan koleksi disimpan di `localStorage` (key `kkn-kenalan`) sebagai
+daftar nama file, jadi urutan data boleh diubah tanpa merusak koleksi.
 
 Tambah anggota cukup menambah satu blok di `data/anggota.js`:
 
@@ -282,9 +287,20 @@ Tambah anggota cukup menambah satu blok di `data/anggota.js`:
 - `fokus` opsional, `{ x: 50, y: 35 }` dalam persen: menentukan titik wajah saat
   foto potret `9:16` dipotong jadi kartu dan thumbnail. Naikkan `y` kalau wajah
   terlihat terlalu rendah. Nilai default dipakai kalau `fokus` tidak ada.
+- `rare` opsional, `rare: true` = **anggota langka**. Posisinya digeser ke
+  belakang antrean sehingga tidak ikut pada sepuluh tarikan pertama, dan
+  kartunya dapat bingkai emas + kilau. Sisa peluang acaknya membuat dia
+  kadang justru keluar di tarikan pertama — itu yang bikin berasa hoki.
+  Dua angka pengatur ada di `LENTERA.JARANG` (`script.js`):
+  `mulai` = mulai tarikan ke-berapa (default `10`), `hoki` = peluang `0..1`
+  dapat paling depan (default `0.12`).
 - `fotoBersama` = `{ foto, caption }` untuk kartu bonus yang terbuka sendiri
   setelah semua anggota terkumpul. Ganti kedua nilainya di `data/anggota.js` dan
-  taruh file fotonya di `assets/anggota/`.
+  taruh file fotonya di `assets/anggota/`. Kalau foto bonusnya **landscape**
+  (lebih lebar daripada tingginya), kartu, thumbnail Riwayat, dan grid hasil
+  otomatis berubah jadi `16/9` + `object-fit: contain` setelah gambarnya
+  termuat, jadi foto bersama tidak pernah terpotong. Aturan `fokus` hanya
+  berlaku untuk foto potret.
 
 ### Mengganti caption
 

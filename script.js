@@ -1902,7 +1902,11 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
                         serpihan kertas dan percikan), KMAX_LANGIT untuk
                         kunang-kunang.
      DURASI ANIMASI ... LENTERA.DURASI (detik) dan LENTERA.KEDIP (detik,
-                        makin kecil = apinya makin cepat berkedip). */
+                         makin kecil = apinya makin cepat berkedip).
+     ANGGOTA LANGKA ... LENTERA.JARANG. `mulai` = anggota berlabel `rare`
+                         dijadwalkan keluar mulai tarikan ke-`mulai` (jadi
+                         tidak ikut pada sepuluh tarikan pertama), `hoki` =
+                         peluang (0..1) dia malah keluar paling depan. */
 
   const LENTERA = {
     AURA: [
@@ -1911,9 +1915,12 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
       { nama: "krem putih",   inti: "#FFFDF4", mid: "rgba(255, 247, 226, 0.32)", rindu: "rgba(255, 247, 226, 0)" },
       { nama: "rose lembut",  inti: "#FFE2DA", mid: "rgba(241, 190, 178, 0.32)", rindu: "rgba(241, 190, 178, 0)" }
     ],
-    /* 1,2 + 1,0 + 0,4 + 1,4 = 4,0 detik, urutan sama dengan style.css */
+    /* 1,2 + 1,0 + 0,4 + 1,4 = 4,0 detik, urutan sama seperti style.css */
     DURASI: {locale: 1.2, naik: 1.0, ledakan: 0.4, reveal: 1.4, singkat: 0.55},
-    KEDIP: {dasar: 2.6, cepat: 0.3}
+    KEDIP: {dasar: 2.6, cepat: 0.3},
+    /* anggota langka: mulai tarikan ke-`mulai`, peluang `hoki` dapat paling
+       depan. 0 = semua anggota keluar rata-rata */
+    JARANG: {mulai: 10, hoki: 0.12}
   };
 
   /* ===================================================================
@@ -2066,7 +2073,17 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
     cur: null, tl: null, onLanjut: null, lanjutFn: null, lastFocus: null,
     _px: null, _py: null, _gerak: null,
 
-    /* ------------------------------------------------------- kerangka */
+    /* Ragam foto: kartu/thumbnail/grid Kenalan normalnya 4/5 potret dengan
+       object-fit: cover. Foto mendatar (foto bersama, atau anggota yang
+       fotonya landscape) TIDAK boleh dipotong, jadi begitu gambarnya sudah
+       dimuat dan tahu ukuran aslinya, kotaknya dibikin ikut rasio foto dan
+       object-fit-nya contain. Dipakai di kartu, thumbnail Riwayat, dan grid
+       hasil Tarik x10. */
+    rasio(boxed, im) {
+      if (!boxed || !im || !im.naturalWidth || !im.naturalHeight) return;
+      boxed.classList.toggle("is-wide", im.naturalWidth > im.naturalHeight);
+    },
+
     build() {
       const self = this;
       const raw = Array.isArray(window.ANGGOTA) ? window.ANGGOTA : [];
@@ -2139,6 +2156,7 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
             peran: a.peran || "", asal: a.asal || "", kalimat: a.kalimat || "",
             foto: KDIR + a.foto,
             thumb: KDIR + (a.thumb || a.foto.replace(/\.webp$/i, "-sm.webp")),
+            rare: !!a.rare,
             fx: typeof f.x === "number" ? clamp(f.x, 0, 100) : 50,
             fy: typeof f.y === "number" ? clamp(f.y, 0, 100) : 35
           };
@@ -2164,8 +2182,41 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
       this.perluBonus = false;
       this.bonusMuncul = false;
       this.batch = [];
+      this.jarang();
       this.gambarRiwayat();
       this.perbarui();
+    },
+
+    /* Anggota berlabel `rare` (lihat data/anggota.js): tipikalnya keluar
+       belakangan, yaitu di luar sepuluh tarikan pertama. Peluang kecil dia
+       justru keluar paling awal (biar tetap ada unsur hoki). Jumlah anggota
+       tidak berubah: setiap orang tetap keluar tepat satu kali, cuma
+       posisinya yang digeser. */
+    jarang() {
+      const n = this.antre.length;
+      if (n < 2) return;
+      const set = LENTERA.JARANG;
+      /* di bawah ini = tidak keluar pada 10 tarikan pertama */
+      const awal = clamp(set.mulai, 0, n - 1);
+      const dolar = set.hoki;             /* 0..1, peluang "langsung dapat" */
+      const self = this;
+      this.list.forEach(function (m) {
+        if (!m.rare) return;
+        const i = self.antre.indexOf(m);
+        if (i < 0) return;
+        self.antre.splice(i, 1);
+        let t;
+        if (Math.random() < dolar) {
+          /* hoki banget: di tiga tarikan pertama */
+          t = Math.floor(Math.random() * Math.min(3, n));
+        } else {
+          /* condong ke ujung antrean, makin lama makin dekat belakang */
+          const sisa = n - awal;                 /* selalu >= 1 */
+          const r = Math.random();
+          t = awal + Math.min(sisa - 1, Math.floor(r * r * sisa));
+        }
+        self.antre.splice(clamp(t, 0, n - 1), 0, m);
+      });
     },
 
     auraAcak() {
@@ -2209,7 +2260,9 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
         const k = e.key;
         if (k === "Escape") {
           e.preventDefault();
-          if (self.sedangAnimasi()) self.lewati(); else self.lanjut();
+          /* lanjut() yang memutuskan: saat Tarik x10 dia hanya menuntaskan
+             kartu yang sedang muncul, bukan melompat ke layar hasil */
+          self.lanjut();
           return;
         }
         if (k === "Tab") { self.jebak(e); return; }
@@ -2217,7 +2270,7 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
           /* tombol sudah punya perilaku bawaan, jangan dobelkan */
           if (e.target && e.target.tagName === "BUTTON") return;
           e.preventDefault();
-          if (self.sedangAnimasi()) self.lewati(); else self.lanjut();
+          self.lanjut();
         }
       });
     },
@@ -2328,6 +2381,7 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
       if (polos && banyak > 1) { this.selesaiBatch(); return; }
 
       const aura = this.auraAcak();
+      if (this.shout) this.shout.textContent = batch[0].rare ? "LANGKA!" : "";
       this.sinematik(aura, function () {
         self.kartu(batch[0], "penuh", self.lanjutFn);
       });
@@ -2460,7 +2514,12 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
     /* ================================================ KARTU / REVEAL ===== */
     /* mode: "penuh" (satu tarikan) | "singkat" (x10) | "buka" (riwayat atau
        kartu di layar hasil) | "bonus". onLanjut dipanggil saat pengguna menekan
-       Lanjut, Escape, atau tap di mana saja. */
+       Lanjut, Escape, atau tap di mana saja.
+       Tarik x10 tidak ganti kartu sendiri: tiap orang menunggu pengguna
+       menekan Lanjut. Kalau animasi kartu masih jalan, ketukan pertama
+       menuntaskan animasinya saja (kartu tampil utuh), ketukan berikutnya
+       baru pindah ke orang berikutnya. Jadi sepuluh orang tetap terlihat
+       satu per satu tanpa ada yang kelewat. */
     kartu(m, mode, onLanjut) {
       const self = this;
       this.phase = "card";
@@ -2481,7 +2540,7 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
             if (i >= 0) { self.zoomBuka(i); return; }
           }
           /* kartu bonus belum ada di Riwayat: buka dengan daftar seadanya */
-          self.daftarZoom = [{ m: m, cap: m.kalimat || m.nama }];
+          self.daftarZoom = [{ m: m }];
           self.zoomBuka(0);
         };
         this.art.addEventListener("click", besar);
@@ -2492,7 +2551,7 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
       this.buka("card");
       if (this.next) this.next.textContent = mode === "bonus" ? "Tutup" : "Lanjut";
       this.skipun(mode === "penuh" || mode === "singkat");
-      this.saya("Kamu mendapat: " + m.nama);
+      this.saya("Kamu mendapat: " + m.nama + (m.rare ? " — langka!" : ""));
 
       if (!hasGSAP || reduced() || mode === "buka") {
         if (this.tl) { this.tl.kill(); this.tl = null; }
@@ -2551,16 +2610,21 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
       if (this.next) this.next.focus({preventScroll: true});
     },
 
-    /* Isi kartu. Foto SELALU memenuhi lebar kartu: .lcard__art memakai
+    /* Isi kartu. Foto potret (9:16) memenuhi lebar kartu: .lcard__art memakai
        width 100% dan aspect-ratio 4/5, lalu img-nya object-fit: cover dengan
-       object-position dari field fokus. Tidak ada lagi area krem di sisi foto. */
+       object-position dari field fokus. Foto mendatar (foto bersama) langsung
+       dibikin 16/9 + contain begitu termuat, jadi tidak pernah terpotong. */
     isi(m, denganBadge) {
       const self = this;
       this.art.style.setProperty("--fx", m.fx + "%");
       this.art.style.setProperty("--fy", m.fy + "%");
-      this.art.classList.remove("is-no-foto");
+      this.art.classList.remove("is-no-foto", "is-wide");
+      this.art.classList.toggle("is-langka", !!m.rare);
       this.img.classList.remove("is-on");
-      this.img.onload = function () { self.img.classList.add("is-on"); };
+      this.img.onload = function () {
+        self.img.classList.add("is-on");
+        self.rasio(self.art, self.img);
+      };
       this.img.onerror = function () { self.art.classList.add("is-no-foto"); };
       this.img.alt = "Foto " + m.nama;
       this.img.src = m.foto;
@@ -2573,7 +2637,13 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
       this.note.hidden = !m.kalimat;
       this.from.textContent = m.asal || "";
       this.from.hidden = !m.asal;
-      this.badge.hidden = !denganBadge;
+      /* anggota langka memakai lencana yang sama, cuma tulisan dan warnanya
+         berubah supaya bedanya kelihatan seketika */
+      if (this.badge) {
+        this.badge.textContent = m.rare ? "LANGKA" : "BARU";
+        this.badge.classList.toggle("is-langka", !!m.rare);
+        this.badge.hidden = !denganBadge;
+      }
     },
 
     /* nama dipecah jadi span per huruf supaya bisa dimasking dengan yPercent */
@@ -2600,6 +2670,18 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
         this.kartu(m, "singkat", langkah);
       };
       langkah();
+    },
+
+    /* Reveal kartu Tarik x10 yang masih jalan dituntaskan seketika: kartu
+       tampil utuh, lalu tetap menunggu ketukan berikutnya — tidak melompat
+       ke layar hasil. Ini pengganti lewati() supaya ketukan di tengah
+       animasi tidak menutup seluruh tarikan. */
+    tuntaskan() {
+      if (this.tl) { this.tl.kill(); this.tl = null; }
+      this.racik();
+      this.skipun(false);
+      this.paralaksKartu(true);
+      this.selesaiReveal(false);
     },
 
     /* -------------------- selesai satu tarikan: catat riwayat, lalu berikutnya */
@@ -2637,12 +2719,14 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
         b.type = "button";
         b.style.setProperty("--fx", m.fx + "%");
         b.style.setProperty("--fy", m.fy + "%");
+        if (m.rare) b.classList.add("is-langka");
         b.setAttribute("aria-label", m.nama + " — buka kartunya");
         const im = new Image();
         im.loading = "lazy";
         im.decoding = "async";
         im.alt = "Foto " + m.nama;
         im.src = m.thumb;
+        im.addEventListener("load", function () { self.rasio(b, im); }, { once: true });
         b.appendChild(im);
         b.appendChild(el("b", null, m.panggilan || m.nama));
         b.addEventListener("click", function () {
@@ -2701,20 +2785,46 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
       this.zoomCap.classList.remove("is-on");
       this.zoomImg.src = d.m.foto;
       this.zoomImg.alt = "Foto " + d.m.nama;
-      this.zoomCap.textContent = d.cap || "";
+      this.isiCapZoom(d.m);
       lockScroll(true);
 
       /* gambar membesar setelah foto benar-benar selesai dimuat, supaya
-         tidak muncul gepeng lalu melebar */
+         tidak muncul gepeng lalu melebar. Kalau fotonya gagal dimuat,
+         caption tetap dimunculkan supaya nama dan kalimatnya tidak hilang. */
       const tampil = function () {
         self.zoomImg.classList.add("is-on");
         self.zoomCap.classList.add("is-on");
       };
       if (this.zoomImg.complete && this.zoomImg.naturalWidth) tampil();
-      else this.zoomImg.addEventListener("load", tampil, { once: true });
+      else {
+        this.zoomImg.addEventListener("load", tampil, { once: true });
+        this.zoomImg.addEventListener("error", function () {
+          self.zoomImg.classList.add("is-on");
+          self.zoomCap.classList.add("is-on");
+        }, { once: true });
+      }
 
       if (this.zoomClose) this.zoomClose.focus({ preventScroll: true });
       this.saya("Foto diperbesar: " + d.m.nama);
+    },
+
+    /* Caption di bawah foto yang diperbesar: nama besar, peran/asal kecil,
+       lalu kalimatnya. Semua baris yang kosong dilewati, jadi anggota tanpa
+       peran atau asal tetap tampil rapi. */
+    isiCapZoom(m) {
+      const cap = this.zoomCap;
+      while (cap.firstChild) cap.removeChild(cap.firstChild);
+      if (!m) return;
+      const baris = function (kelas, teks) {
+        if (!teks) return;
+        const e2 = document.createElement("span");
+        e2.className = kelas;
+        e2.textContent = teks;
+        cap.appendChild(e2);
+      };
+      baris("lzoom__cap-nama", m.isBonus ? m.nama : (m.panggilan ? "@" + m.panggilan : m.nama));
+      baris("lzoom__cap-meta", [m.peran, m.asal].filter(Boolean).join(" · "));
+      baris("lzoom__cap-note", m.kalimat || "");
     },
 
     zoomGeser(arah) {
@@ -2758,10 +2868,10 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
         const j = Math.floor(Math.random() * (i + 1));
         const t = urut[i]; urut[i] = urut[j]; urut[j] = t;
       }
-      const daftar = urut.map(function (m) { return { m: m, cap: m.nama }; });
+      const daftar = urut.map(function (m) { return { m: m }; });
       /* foto bersama jadi kotak terakhir di Riwayat, baru bisa diklik */
       if (this.bonusMuncul && this.fotoBersama) {
-        daftar.push({ m: this.fotoBersama, cap: this.fotoBersama.nama, bersama: true });
+        daftar.push({ m: this.fotoBersama, bersama: true });
       }
       /* daftar ini juga jadi sumber navigasi panah di penonton foto */
       self.daftarZoom = daftar;
@@ -2770,6 +2880,7 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
         const m = d.m;
         const li = el("li", "lent__thumb");
         if (d.bersama) li.classList.add("lent__thumb--bersama");
+        if (m.rare) li.classList.add("is-langka");
         li.style.setProperty("--fx", m.fx + "%");
         li.style.setProperty("--fy", m.fy + "%");
         li.tabIndex = 0;
@@ -2780,7 +2891,11 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
         im.decoding = "async";
         im.alt = "Foto " + m.nama;
         im.src = m.thumb;
-        im.addEventListener("load", function () { li.classList.add("is-seen"); });
+        /* foto mendatar (foto bersama) tidak dipotong jadi 4/5 */
+        im.addEventListener("load", function () {
+          li.classList.add("is-seen");
+          self.rasio(li, im);
+        });
         li.appendChild(im);
         li.appendChild(el("b", null, m.panggilan || m.nama));
         const buka = function () { self.zoomBuka(i); };
@@ -2818,10 +2933,21 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
         }
       }
     },
-    skipun(v) { if (this.skip) this.skip.hidden = !v; },
+    /* Tombol "Lewati". Selama Tarik x10 tombolnya berbunyi "Lewati semua"
+       karena lompatannya memang ke layar hasil, bukan ke satu kartu. */
+    skipun(v) {
+      if (!this.skip) return;
+      this.skip.hidden = !v;
+      if (!v) return;
+      const label = this.batchN > 1 ? "Lewati semua" : "Lewati";
+      this.skip.textContent = label;
+      this.skip.setAttribute("aria-label", label + " animasi");
+    },
 
-    /* Lewati. Satu tarikan: lompat ke hasil akhir tarikan itu. Tarik x10:
-       langsung ke layar hasil. */
+    /* Tombol "Lewati" (dan Escape saat animasi jalan). Kalau sedang Tarik x10,
+       lompat ke layar hasil: kartu yang sempat tampil dicatat sebagai keluar
+       dan seluruh fotonya masih bisa dilihat di grid, jadi tidak ada yang
+       hilang. */
     lewati() {
       if (this.phase === "grid") { this.tutupAtauBonus(); return; }
       if (this.tl) { this.tl.kill(); this.tl = null; }
@@ -2838,10 +2964,17 @@ tumpukan : kartu hero + deck      jemuran : tali jemuran
       this.selesaiReveal(false);
     },
 
-    /* Lanjut / Esc / tap: lanjutkan ke langkah berikutnya */
+    /* Lanjut / Esc / tap: lanjutkan ke langkah berikutnya. Saat Tarik x10 dan
+       animasi kartu masih jalan, ketukan pertama hanya menuntaskan kartu yang
+       sedang muncul (bukan menutup tarikan); ketukan berikutnya baru pindah
+       ke orang berikutnya. */
     lanjut() {
       if (this.phase === "grid") { this.tutupAtauBonus(); return; }
-      if (this.sedangAnimasi()) { this.lewati(); return; }
+      if (this.sedangAnimasi()) {
+        if (this.batchN > 1 && this.phase === "card") { this.tuntaskan(); return; }
+        this.lewati();
+        return;
+      }
       const f = this.onLanjut;
       this.onLanjut = null;
       if (f) f();

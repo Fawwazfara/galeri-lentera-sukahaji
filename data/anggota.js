@@ -16,6 +16,11 @@
                 "-sm" (mis. "agi.webp" -> "agi-sm.webp").
      fokus    : opsional. { x, y } dalam persen, jadi titik wajah waktu foto
                 dipotong jadi kartu 4/5. Bawaan { x: 50, y: 35 }.
+      rare    : opsional. true = foto langka: dijadwalkan keluar mulai tarikan
+                ke-10 (atur di LENTERA.JARANG, script.js), jadi tidak ikut
+                pada sepuluh tarikan pertama — kecuali kena peluang hoki, jadi
+                bisa juga langsung dapat di tarikan pertama. Kartunya dapat
+                bingkai emas + kilau. Tanpa `rare`, anggota keluar rata-rata.
 
    FOKUS WAJIB DIISI KALAU WAJAH TERPOTONG
    Semua foto anggota sekarang 9:16 (788 x 1400), sedangkan kartunya 4/5, jadi
@@ -25,6 +30,8 @@
    x = geser kiri/kanan (0 = tepi kiri, 100 = tepi kanan)
    y = geser atas/bawah (0 = paling atas, 100 = paling bawah)
    Aturan cepat: y dibuat lebih kecil supaya wajah naik ke atas.
+   Foto yang MENDATAR (landscape, seperti foto bersama) tidak boleh pakai
+   aturan ini: kotaknya otomatis jadi 16/9 dan fotonya ditampilkan utuh.
 
    BONUS: FOTO BERSAMA
    Muncul setelah semua anggota keluar, jadi taruh foto kelompok di sini.
@@ -37,7 +44,7 @@
 
 window.ANGGOTA = [
   { nama: "Agi",      panggilan: "agi",      peran: "HumLog", asal: "Panyileukan",
-    kalimat: "si night owl tidur paling malam bangung paling siang",
+    kalimat: "si night owl tidur paling malam bangun paling siang",
     foto: "agi.webp" },
 
   { nama: "Akbar",    panggilan: "akbar",    peran: "PDD", asal: "Bekasi",
@@ -45,7 +52,7 @@ window.ANGGOTA = [
     foto: "akbar.webp" },
 
   { nama: "Ersa",     panggilan: "caca",     peran: "Acara", asal: "Sukabumi",
-    kalimat: "sosial battery supermasif sebesar palung mariana",
+    kalimat: "si sosial battery supermasif energi besar recharge nya juga lama jir",
     foto: "caca.webp" },
 
   { nama: "Rafi",   panggilan: "cipung",   peran: "HumLog", asal: "Cianjur",
@@ -54,7 +61,7 @@ window.ANGGOTA = [
 
   { nama: "Fawwaz",   panggilan: "fawwaz",   peran: "HumLog", asal: "Soreang",
     kalimat: "terserah sih ini mah masa gw yg kasih sebutan buat diri sendiri",
-    foto: "fawwaz.webp" },
+    foto: "fawwaz.webp", rare: true },
 
   { nama: "Gani",     panggilan: "gani",     peran: "Ketua", asal: "Nagreg",
     kalimat: "si karismatik stylish tapi mandi lu lama anjir",
@@ -73,7 +80,7 @@ window.ANGGOTA = [
     foto: "najla.webp" },
 
   { nama: "Nida",     panggilan: "nida",     peran: "PDD", asal: "Magelang",
-    kalimat: "kalo di ajak ngonten susah auto koper di luar",
+    kalimat: "woy foto gw lagi tidur dah di hapus belum, stop fotoin aib yee",
     foto: "nida.webp", fokus: { x: 50, y: 0 } },
 
   { nama: "Nisa",     panggilan: "nisa",     peran: "sekretaris", asal: "jaksel selatan",
